@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fbf8ef;
+  --foreground: #17202a;
+  --panel: #fffdf7;
+  --panel-border: #d9cfb8;
+  --accent: #214f4b;
+  --accent-contrast: #eef7f4;
+  --danger: #9f1d2d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Manrope", var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+}
+
+.app-shell {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 0% 0%, #f3e7ca 0, transparent 40%),
+    radial-gradient(circle at 100% 20%, #e2f4ee 0, transparent 42%),
+    var(--background);
+}
+
+.dashboard-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+.hero h1 {
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.hero-copy {
+  max-width: 760px;
+  margin-top: 0.75rem;
+  opacity: 0.85;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 700;
+  color: #305f5a;
+  margin-bottom: 0.75rem;
+}
+
+.query-card,
+.panel {
+  margin-top: 1.25rem;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: 0 10px 30px rgba(18, 31, 24, 0.08);
+}
+
+.query-form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.field-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.username-box {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #cdbf9f;
+  padding: 0.8rem 0.9rem;
+  min-height: 150px;
+  resize: vertical;
+  background: #fff;
+}
+
+.source-select,
+.query-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #cdbf9f;
+  padding: 0.7rem 0.85rem;
+  background: #fff;
+}
+
+.submit-btn {
+  width: max-content;
+  border-radius: 999px;
+  border: 1px solid #143f3a;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondary-btn {
+  width: max-content;
+  border-radius: 999px;
+  border: 1px solid #4e5e5b;
+  background: #ffffff;
+  color: #233533;
+  padding: 0.55rem 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.auth-link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.submit-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.panel h2 {
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin-bottom: 0.8rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  border-bottom: 1px solid #e5dbc2;
+  padding: 0.65rem;
+  font-size: 0.94rem;
+  vertical-align: top;
+}
+
+a {
+  color: #1b5f84;
+  font-weight: 600;
+}
+
+.error-box {
+  margin-top: 1rem;
+  border: 1px solid #eeb4bc;
+  border-radius: 12px;
+  background: #fff3f5;
+  padding: 0.8rem;
+  color: var(--danger);
+}
+
+.warning-box {
+  margin-top: 1rem;
+  border: 1px solid #e7cf8a;
+  border-radius: 12px;
+  background: #fff8e8;
+  padding: 0.8rem;
+  color: #6b4f00;
+}
