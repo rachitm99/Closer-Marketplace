@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Closer Creator Dashboard",
-  description: "Instagram username insights dashboard powered by Meta Graph API",
+  description:
+    "Creator discovery and campaign review platform for agencies, consultancies, and SaaS teams.",
 };
 
 export default function RootLayout({

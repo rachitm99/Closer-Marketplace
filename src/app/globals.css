@@ -37,6 +37,153 @@ body {
   padding: 2rem 1rem 3rem;
 }
 
+.landing-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-shell::before,
+.landing-shell::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(18px);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.landing-shell::before {
+  width: 18rem;
+  height: 18rem;
+  top: 3rem;
+  right: -4rem;
+  background: rgba(33, 79, 75, 0.15);
+}
+
+.landing-shell::after {
+  width: 14rem;
+  height: 14rem;
+  left: -5rem;
+  bottom: 6rem;
+  background: rgba(243, 231, 202, 0.55);
+}
+
+.landing-wrap {
+  position: relative;
+  z-index: 1;
+  padding-top: 3rem;
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.landing-hero-copy,
+.hero-panel,
+.landing-card {
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 253, 247, 0.9);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(18, 31, 24, 0.08);
+}
+
+.landing-hero-copy {
+  padding: clamp(1.2rem, 3vw, 2rem);
+}
+
+.hero-panel,
+.landing-card {
+  padding: 1.2rem;
+}
+
+.section-block {
+  margin-top: 1.25rem;
+}
+
+.section-heading {
+  margin-bottom: 0.8rem;
+}
+
+.section-heading h2,
+.landing-card h2,
+.hero-panel h2 {
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.landing-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.hero-panel-label {
+  font-weight: 800;
+  margin-bottom: 0.8rem;
+}
+
+.pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.pill-list li {
+  border: 1px solid #c9dacd;
+  background: #f5fbf8;
+  color: #1f4f49;
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.hero-panel-copy {
+  margin: 0;
+  opacity: 0.9;
+}
+
+.feature-grid,
+.split-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.split-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.bullet-list {
+  margin: 0.9rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+@media (max-width: 900px) {
+  .landing-hero,
+  .feature-grid,
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .hero h1 {
   font-size: clamp(1.8rem, 4vw, 3rem);
   line-height: 1.1;
