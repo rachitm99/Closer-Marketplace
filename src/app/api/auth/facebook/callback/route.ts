@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { consumeOAuthStateCookie, setAuthSession } from "@/lib/auth-session";
-import { refreshLongLivedUserToken } from "@/lib/meta-page-token";
+import { refreshLongLivedUserToken, generatePageTokenFromUserToken } from "@/lib/meta-page-token";
 
 type OAuthTokenResponse = {
   access_token?: string;
@@ -19,15 +19,31 @@ type ProfileResponse = {
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const incomingState = request.nextUrl.searchParams.get("state");
+  const error = request.nextUrl.searchParams.get("error");
+  const errorReason = request.nextUrl.searchParams.get("error_reason");
+  const errorDescription = request.nextUrl.searchParams.get("error_description");
 
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
-  const graphVersion = process.env.META_GRAPH_API_VERSION ?? "v23.0";
+  const graphVersion = process.env.META_GRAPH_API_VERSION ?? "v25.0";
+  const igUserId = process.env.META_IG_USER_ID;
+  const explicitPageId = process.env.META_PAGE_ID;
 
   if (!appId || !appSecret) {
     return NextResponse.json(
       { error: "META_APP_ID and META_APP_SECRET must be configured." },
       { status: 500 },
+    );
+  }
+
+  if (error) {
+    return NextResponse.json(
+      {
+        error: "Meta OAuth error",
+        reason: errorReason,
+        description: errorDescription,
+      },
+      { status: 400 },
     );
   }
 
@@ -93,11 +109,37 @@ export async function GET(request: NextRequest) {
 
   const profile = (await profileResponse.json()) as ProfileResponse;
 
+  // Auto-generate page token for Creator Marketplace API
+  let pageToken: string | undefined;
+  let pageTokenExpiresAt: number | undefined;
+
+  if (igUserId && appSecret) {
+    try {
+      const pageTokenResult = await generatePageTokenFromUserToken({
+        graphVersion,
+        appSecret,
+        igUserId,
+        userAccessToken: longLived.accessToken,
+        explicitPageId,
+      });
+      pageToken = pageTokenResult.pageToken;
+      pageTokenExpiresAt = Date.now() + pageTokenResult.expiresIn * 1000;
+    } catch (pageTokenError) {
+      // Log but don't fail login - page token generation might fail for various reasons
+      console.error(
+        "Failed to auto-generate page token during login:",
+        pageTokenError instanceof Error ? pageTokenError.message : pageTokenError,
+      );
+    }
+  }
+
   await setAuthSession({
     accessToken: longLived.accessToken,
     expiresAt: Date.now() + longLived.expiresIn * 1000,
     userId: profile.id,
     userName: profile.name,
+    pageToken,
+    pageTokenExpiresAt,
   });
 
   return NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));

@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthSession, setAuthSession } from "@/lib/auth-session";
-import { refreshLongLivedUserToken, resolveCreatorMarketplacePageToken } from "@/lib/meta-page-token";
+import { refreshLongLivedUserToken, resolveCreatorMarketplacePageToken, generatePageTokenFromUserToken } from "@/lib/meta-page-token";
 
 type MetaApiError = {
   message?: string;
@@ -528,6 +528,9 @@ export async function GET(request: NextRequest) {
 
   let accessToken: string;
   let sessionUserToken: string | undefined;
+  let sessionPageToken: string | undefined;
+
+  const PAGE_TOKEN_REFRESH_BUFFER_SECONDS = 7 * 24 * 60 * 60; // Refresh if within 7 days of expiry
 
   try {
     const session = await getAuthSession();
@@ -535,6 +538,7 @@ export async function GET(request: NextRequest) {
     if (session?.accessToken) {
       const secondsUntilExpiry = Math.floor((session.expiresAt - Date.now()) / 1000);
 
+      // Refresh user token if needed
       if (
         secondsUntilExpiry > 0 &&
         secondsUntilExpiry < USER_TOKEN_REFRESH_BUFFER_SECONDS &&
@@ -550,45 +554,114 @@ export async function GET(request: NextRequest) {
           });
 
           const refreshedExpiresAt = Date.now() + refreshed.expiresIn * 1000;
+          
+          // Also refresh page token if we have a user token
+          let newPageToken = session.pageToken;
+          let newPageTokenExpiresAt = session.pageTokenExpiresAt;
+          
+          if (igUserId && appSecret) {
+            try {
+              const pageTokenResult = await generatePageTokenFromUserToken({
+                graphVersion,
+                appSecret,
+                igUserId,
+                userAccessToken: refreshed.accessToken,
+                explicitPageId,
+              });
+              newPageToken = pageTokenResult.pageToken;
+              newPageTokenExpiresAt = Date.now() + pageTokenResult.expiresIn * 1000;
+            } catch {
+              // Keep existing page token if refresh fails
+            }
+          }
+          
           await setAuthSession({
             accessToken: refreshed.accessToken,
             expiresAt: refreshedExpiresAt,
             userId: session.userId,
             userName: session.userName,
+            pageToken: newPageToken,
+            pageTokenExpiresAt: newPageTokenExpiresAt,
           });
 
           sessionUserToken = refreshed.accessToken;
+          sessionPageToken = newPageToken;
         } catch {
           sessionUserToken = session.accessToken;
+          sessionPageToken = session.pageToken;
         }
       } else {
         sessionUserToken = session.accessToken;
+        sessionPageToken = session.pageToken;
+      }
+      
+      // Refresh page token if it's expiring soon (independent of user token)
+      if (
+        sessionPageToken &&
+        session.pageTokenExpiresAt &&
+        session.pageTokenExpiresAt - Date.now() < PAGE_TOKEN_REFRESH_BUFFER_SECONDS * 1000 &&
+        igUserId &&
+        appSecret
+      ) {
+        try {
+          const pageTokenResult = await generatePageTokenFromUserToken({
+            graphVersion,
+            appSecret,
+            igUserId,
+            userAccessToken: sessionUserToken || session.accessToken,
+            explicitPageId,
+          });
+          const newPageTokenExpiresAt = Date.now() + pageTokenResult.expiresIn * 1000;
+          
+          // Update session with new page token
+          await setAuthSession({
+            accessToken: session.accessToken,
+            expiresAt: session.expiresAt,
+            userId: session.userId,
+            userName: session.userName,
+            pageToken: pageTokenResult.pageToken,
+            pageTokenExpiresAt: newPageTokenExpiresAt,
+          });
+          
+          sessionPageToken = pageTokenResult.pageToken;
+        } catch {
+          // Keep existing page token if refresh fails
+        }
       }
     }
   } catch {
     // continue and let downstream checks return actionable auth errors
   }
 
-  if (!explicitPageToken && !sessionUserToken) {
+  if (!explicitPageToken && !sessionPageToken && !sessionUserToken) {
     return NextResponse.json(
       {
-        error:
-          "Authentication required. Sign in with Facebook first to authorize Creator Marketplace calls.",
+        error: "Authentication required to search external creators.",
+        instructions:
+          "Sign in with Facebook to auto-generate page token for Creator Marketplace access.",
+        loginUrl: "/api/auth/facebook/login",
       },
       { status: 401 },
     );
   }
 
   try {
-    accessToken = await resolveCreatorMarketplacePageToken({
-      graphVersion,
-      appId,
-      appSecret,
-      igUserId,
-      userAccessToken: sessionUserToken,
-      explicitPageToken,
-      explicitPageId,
-    });
+    // Prefer explicit token, then session page token, then derive from user token
+    if (explicitPageToken) {
+      accessToken = explicitPageToken;
+    } else if (sessionPageToken) {
+      accessToken = sessionPageToken;
+    } else {
+      accessToken = await resolveCreatorMarketplacePageToken({
+        graphVersion,
+        appId,
+        appSecret,
+        igUserId,
+        userAccessToken: sessionUserToken,
+        explicitPageToken,
+        explicitPageId,
+      });
+    }
   } catch (error) {
     return NextResponse.json(
       {

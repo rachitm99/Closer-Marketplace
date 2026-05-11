@@ -9,6 +9,8 @@ type StoredSession = {
   expiresAt: number;
   userId?: string;
   userName?: string;
+  pageToken?: string;
+  pageTokenExpiresAt?: number;
 };
 
 function getSessionSecret(): string {

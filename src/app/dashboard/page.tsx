@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 type CreatorMarketplaceResult = {
   creators: Array<{
@@ -33,27 +33,39 @@ export default function DashboardPage() {
 
   const username = useMemo(() => usernameInput.replace(/@/g, "").trim(), [usernameInput]);
 
+  const pathname = usePathname();
+
   useEffect(() => {
-    async function loadSession() {
+    let cancelled = false;
+
+    async function checkSessionAndMaybeRedirect() {
       setAuthLoading(true);
 
       try {
         const response = await fetch("/api/auth/session", { cache: "no-store" });
         const payload = (await response.json()) as SessionState;
+        if (cancelled) return;
         setSession(payload);
-        if (!payload.authenticated) {
+
+        if (!payload.authenticated && pathname !== "/login") {
           router.replace("/login");
         }
       } catch {
-        setSession({ authenticated: false });
-        router.replace("/login");
+        if (!cancelled) {
+          setSession({ authenticated: false });
+          if (pathname !== "/login") router.replace("/login");
+        }
       } finally {
-        setAuthLoading(false);
+        if (!cancelled) setAuthLoading(false);
       }
     }
 
-    void loadSession();
-  }, [router]);
+    void checkSessionAndMaybeRedirect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, pathname]);
 
   async function onLogout() {
     await fetch("/api/auth/logout", { method: "POST" });

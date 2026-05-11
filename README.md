@@ -2,6 +2,33 @@
 
 Next.js dashboard that uses Facebook Login + Instagram Creator Marketplace API.
 
+
+## 🚀 Production-Ready Features
+
+- ✅ **Automatic token generation** - Page token auto-generated on user login
+- ✅ **Auto-refresh system** - Tokens refresh 7 days before expiry
+- ✅ **Zero manual setup** - No manual token management needed
+- ✅ **Search external creators** - Find any public Instagram creator (e.g., "dr_nishaa")
+- ✅ **Secure session storage** - Encrypted httpOnly cookies
+- ✅ **Graceful fallbacks** - Clear error messages with next steps
+
+## Quick Start
+
+```bash
+# 1. Setup environment
+cp .env.local.example .env.local
+# Fill in META_APP_ID, META_APP_SECRET, META_IG_USER_ID, SESSION_SECRET
+
+# 2. Start dev server
+npm run dev
+
+# 3. Login with Facebook at http://localhost:3000/login
+
+# 4. Search creators
+curl "http://localhost:3000/api/creator-marketplace?username=dr_nishaa"
+```
+
+See [SETUP.md](./SETUP.md) for detailed setup instructions.
 ## What is implemented
 
 - Facebook Login for user-scoped API access
@@ -16,18 +43,22 @@ Next.js dashboard that uses Facebook Login + Instagram Creator Marketplace API.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and set:
+Copy `.env.local.example` to `.env.local` and set:
 
 - `META_APP_ID`
 - `META_APP_SECRET`
 - `SESSION_SECRET` (32+ chars)
 - `META_IG_USER_ID`
 
+**For searching external creators, you need:**
+
+- `META_PAGE_ACCESS_TOKEN` - Generate automatically with: `npm run setup "user_token"`
+  - See [SETUP.md](./SETUP.md) for detailed instructions
+
 Optional:
 
 - `META_PAGE_ID` (if user has multiple pages and you want to force one)
-- `META_PAGE_ACCESS_TOKEN` (service fallback; normally not needed with login)
-- `META_GRAPH_API_VERSION` (defaults to `v23.0`)
+- `META_GRAPH_API_VERSION` (defaults to `v25.0`)
 - `SAVE_CREATOR_MARKETPLACE_RAW` (defaults to `true`; set `false` to disable raw snapshots)
 - `CREATOR_MARKETPLACE_RAW_DIR` (optional output directory for raw snapshots)
 

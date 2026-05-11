@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 type SessionState = {
   authenticated: boolean;
@@ -15,24 +15,34 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<SessionState>({ authenticated: false });
 
+  const pathname = usePathname();
+
   useEffect(() => {
-    async function loadSession() {
+    let cancelled = false;
+
+    async function checkAndMaybeRedirect() {
       try {
         const response = await fetch("/api/auth/session", { cache: "no-store" });
         const payload = (await response.json()) as SessionState;
+        if (cancelled) return;
         setSession(payload);
-        if (payload.authenticated) {
+
+        if (payload.authenticated && pathname !== "/dashboard") {
           router.replace("/dashboard");
         }
       } catch {
-        setSession({ authenticated: false });
+        if (!cancelled) setSession({ authenticated: false });
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    void loadSession();
-  }, [router]);
+    void checkAndMaybeRedirect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, pathname]);
 
   return (
     <div className="app-shell">

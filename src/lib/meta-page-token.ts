@@ -206,3 +206,26 @@ export async function resolveCreatorMarketplacePageToken(
 
   return derivedPageToken;
 }
+
+/**
+ * Generate a page token from a user token
+ * Used during OAuth login to immediately create a page token
+ * Returns both the token and its expiration time for storage
+ */
+export async function generatePageTokenFromUserToken(options: {
+  graphVersion: string;
+  appSecret?: string;
+  igUserId: string;
+  userAccessToken: string;
+  explicitPageId?: string;
+}): Promise<{ pageToken: string; expiresIn: number }> {
+  const pageToken = await fetchPageTokenFromUserToken(options);
+  
+  // Page tokens typically last 60 days
+  const expiresIn = 60 * 24 * 60 * 60;
+  
+  return {
+    pageToken,
+    expiresIn,
+  };
+}
