@@ -2,10 +2,10 @@ import { getAuthSession } from "@/lib/auth-session";
 import Link from "next/link";
 
 const platformDataUses = [
-  "Search Instagram creators by username during campaign discovery",
-  "Review creator profiles and engagement insights for campaign fit",
-  "Evaluate creator metrics to assess suitability for influencer campaigns",
-  "Export creator research for client pitches and campaign planning",
+  "Clients search Instagram creators by username for campaign discovery",
+  "Clients review creator profiles and insights inside their workspace",
+  "Teams compare creators and shortlist for campaign proposals",
+  "Clients export creator research and notes for approvals",
 ];
 
 export default async function Home() {
@@ -16,12 +16,12 @@ export default async function Home() {
       <main className="dashboard-wrap landing-wrap">
         <section className="hero landing-hero">
           <div className="landing-hero-copy">
-            <p className="eyebrow">Closer Ventures</p>
-            <h1>Creator discovery and campaign planning for influencer marketing.</h1>
+            <p className="eyebrow">Closer Creator Platform</p>
+            <h1>A creator discovery platform for client teams and agencies.</h1>
             <p className="hero-copy">
-              Closer Ventures uses this dashboard to search Instagram creators, research profiles
-              and insights, and evaluate influencers for client campaigns. Built for faster,
-              smarter influencer marketing workflow.
+              Closer is a multi-tenant SaaS platform that lets client businesses search Instagram
+              creators, review profile insights, and build campaign shortlists inside their own
+              workspace. Each client gets their own login, data views, and exports.
             </p>
             <div className="cta-row">
               <Link href={session?.accessToken ? "/dashboard" : "/login"} className="submit-btn">
@@ -36,13 +36,13 @@ export default async function Home() {
           <aside className="hero-panel">
             <p className="hero-panel-label">Built for</p>
             <ul className="pill-list">
-              <li>Influencer Marketing</li>
-              <li>Campaign Planning</li>
-              <li>Creator Research</li>
+              <li>Agency Clients</li>
+              <li>Brand Teams</li>
+              <li>Creator Ops</li>
             </ul>
             <p className="hero-panel-copy">
-              Designed for agencies that manage influencer campaigns and need fast,
-              reliable creator discovery and research.
+              Designed for client businesses that need a secure, self-serve creator discovery
+              platform with shared workflows.
             </p>
           </aside>
         </section>
@@ -91,21 +91,21 @@ export default async function Home() {
 
           <article className="landing-card">
             <p className="eyebrow">Our business</p>
-            <h2>Closer Ventures — influencer marketing for brands.</h2>
+            <h2>Closer Ventures — a SaaS tech provider for creator discovery.</h2>
             <p style={{ marginBottom: 0 }}>
-              We help brands find and partner with the right creators. This dashboard is our
-              internal tool for creator research, campaign planning, and influencer evaluation.
+              We provide a client-facing platform used by multiple businesses to manage creator
+              research, campaign planning, and influencer evaluation.
             </p>
           </article>
         </section>
 
         <section className="section-block landing-card">
           <p className="eyebrow">Data usage</p>
-          <h2>Platform Data is used only for campaign research and planning.</h2>
+          <h2>Platform Data is used only to deliver the client product.</h2>
           <p>
-            We use Instagram insights to evaluate creator suitability for client campaigns.
-            Creator data is research material for our influencer marketing business — never
-            shared, sold, or used outside the scope of campaign planning.
+            Platform Data is used inside the Closer product to help client teams research creators,
+            build shortlists, and plan campaigns. Data is not resold or used outside client
+            workspaces.
           </p>
         </section>
       </main>
