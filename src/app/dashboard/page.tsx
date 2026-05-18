@@ -73,6 +73,20 @@ function formatMetricValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function normalizeBreakdownResults(
+  results: Array<Record<string, unknown>>,
+): MetricBreakdown["results"] {
+  return results.map((result) => ({
+    dimensionValue:
+      typeof result.dimension_value === "string" ? result.dimension_value : "Unknown",
+    value:
+      typeof result.value === "number" || typeof result.value === "string"
+        ? result.value
+        : undefined,
+    percentage: typeof result.percentage === "number" ? result.percentage : undefined,
+  }));
+}
+
 function extractMetricsFromResponses(rawApiResponses?: Array<Record<string, unknown>>): MetricEntry[] {
   const metrics: MetricEntry[] = [];
 
@@ -96,18 +110,7 @@ function extractMetricsFromResponses(rawApiResponses?: Array<Record<string, unkn
       if (rawBreakdowns?.dimension_key && Array.isArray(rawBreakdowns.results)) {
         breakdowns.push({
           dimensionKey: rawBreakdowns.dimension_key,
-          results: rawBreakdowns.results.map((result) => ({
-            dimensionValue:
-              typeof result.dimension_value === "string"
-                ? result.dimension_value
-                : "Unknown",
-            value:
-              typeof result.value === "number" || typeof result.value === "string"
-                ? result.value
-                : undefined,
-            percentage:
-              typeof result.percentage === "number" ? result.percentage : undefined,
-          })),
+          results: normalizeBreakdownResults(rawBreakdowns.results),
         });
       }
 
@@ -244,7 +247,13 @@ function ApiCallCard({ response }: { response: RawApiResponse }) {
 
       <div style={{ marginTop: "0.9rem", display: "grid", gap: "0.65rem" }}>
         {insightData.map((item) => {
-          const breakdowns = (item.total_value as { breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined)?.breakdowns;
+          const rawBreakdowns = (item.total_value as { breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined)?.breakdowns;
+          const breakdowns = rawBreakdowns?.dimension_key && Array.isArray(rawBreakdowns.results)
+            ? {
+                dimensionKey: rawBreakdowns.dimension_key,
+                results: normalizeBreakdownResults(rawBreakdowns.results),
+              }
+            : null;
           return (
             <section
               key={`${response.type}-${item.name}-${item.time_range}`}
@@ -265,15 +274,15 @@ function ApiCallCard({ response }: { response: RawApiResponse }) {
                 {formatMetricValue((item.total_value as { value?: unknown } | undefined)?.value)}
               </div>
 
-              {breakdowns?.dimension_key && Array.isArray(breakdowns.results) ? (
+              {breakdowns ? (
                 <div style={{ marginTop: "0.75rem" }}>
                   <div style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(15,23,42,0.55)" }}>
-                    {prettyLabel(breakdowns.dimension_key)}
+                    {prettyLabel(breakdowns.dimensionKey)}
                   </div>
                   <div style={{ marginTop: "0.5rem", display: "grid", gap: "0.5rem" }}>
-                    {breakdowns.results.map((result: MetricBreakdown["results"][number]) => (
+                    {breakdowns.results.map((result) => (
                       <div
-                        key={`${response.type}-${item.name}-${breakdowns.dimension_key}-${result.dimensionValue}`}
+                        key={`${response.type}-${item.name}-${breakdowns.dimensionKey}-${result.dimensionValue}`}
                         style={{
                           display: "grid",
                           gridTemplateColumns: "1fr auto",
