@@ -271,7 +271,7 @@ function ApiCallCard({ response }: { response: RawApiResponse }) {
                     {prettyLabel(breakdowns.dimension_key)}
                   </div>
                   <div style={{ marginTop: "0.5rem", display: "grid", gap: "0.5rem" }}>
-                    {breakdowns.results.map((result) => (
+                    {breakdowns.results.map((result: MetricBreakdown["results"][number]) => (
                       <div
                         key={`${response.type}-${item.name}-${breakdowns.dimension_key}-${result.dimensionValue}`}
                         style={{
