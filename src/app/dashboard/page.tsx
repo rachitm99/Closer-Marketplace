@@ -93,9 +93,19 @@ export default function DashboardPage() {
     setMarketplaceData(null);
 
     try {
-      const endpoint = `/api/creator-marketplace?username=${encodeURIComponent(username)}&query=${encodeURIComponent(
-        queryInput.trim(),
-      )}&include_insights=true&include_media=false&limit=10`;
+      const queryValue = queryInput.trim();
+      const params = new URLSearchParams({
+        username,
+        include_insights: "true",
+        include_media: "false",
+        limit: "10",
+      });
+
+      if (queryValue) {
+        params.set("query", queryValue);
+      }
+
+      const endpoint = `/api/creator-marketplace?${params.toString()}`;
 
       const response = await fetch(endpoint);
       const payload = (await response.json()) as CreatorMarketplaceResult | { error: string };

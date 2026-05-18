@@ -485,6 +485,25 @@ function toCreatorList(items: Array<Record<string, unknown>>): CreatorListItem[]
   });
 }
 
+function findExactUsernameMatch(
+  items: Array<Record<string, unknown>>,
+  requestedUsername: string,
+): Record<string, unknown> | null {
+  const wanted = requestedUsername.replace(/@/g, "").trim().toLowerCase();
+  if (!wanted) {
+    return null;
+  }
+
+  for (const item of items) {
+    const candidate = typeof item.username === "string" ? item.username.toLowerCase() : "";
+    if (candidate === wanted) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const username = request.nextUrl.searchParams
     .get("username")
@@ -791,9 +810,30 @@ export async function GET(request: NextRequest) {
     }
 
     const discoveredCreators = discoveryPayload.data ?? [];
-    const first = discoveredCreators[0] ?? null;
+    const matchedByUsername = username
+      ? findExactUsernameMatch(discoveredCreators as Array<Record<string, unknown>>, username)
+      : null;
+    const selectedDiscoveryRecord =
+      matchedByUsername ?? ((discoveredCreators[0] as Record<string, unknown> | undefined) ?? null);
 
-    if (!first) {
+    if (username && !matchedByUsername) {
+      return NextResponse.json(
+        {
+          error:
+            `No exact Creator Marketplace match found for @${username}. The API may be returning recommendations for your token context instead of a direct username match.`,
+          request: {
+            username,
+            query: query ?? "",
+            limit: Number(limit),
+          },
+          rawCount: discoveredCreators.length,
+          creators: toCreatorList(discoveredCreators as Array<Record<string, unknown>>),
+        },
+        { status: 404 },
+      );
+    }
+
+    if (!selectedDiscoveryRecord) {
       return NextResponse.json(
         {
           error:
@@ -803,7 +843,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const firstRecord = first as Record<string, unknown>;
+    const firstRecord = selectedDiscoveryRecord as Record<string, unknown>;
     const discoveredCreatorId = typeof firstRecord.id === "string" ? firstRecord.id : "";
     const discoveredCreatorUsername =
       typeof firstRecord.username === "string" ? firstRecord.username : "";
