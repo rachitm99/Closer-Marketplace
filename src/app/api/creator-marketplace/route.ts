@@ -699,6 +699,110 @@ export async function GET(request: NextRequest) {
     fields: "id,username,name,country,gender,followers_count",
   });
 
+  // If the caller provided an explicit username, prefer a direct username lookup
+  // using the Creator Insights endpoint (username param) rather than the
+  // general discovery flow. This returns insights and media data for the
+  // requested username when available.
+  if (username) {
+    const rawApiResponses: RawApiResponseCapture[] = [];
+
+    const insightsFieldParts = ["id", "username", "name", "country", "gender", "followers_count"];
+    if (includeInsights) {
+      insightsFieldParts.push("insights");
+    }
+    if (includeMedia) {
+      insightsFieldParts.push(
+        "branded_content_media{media_type,permalink,insights.metrics(views)}",
+        "recent_media{media_type,permalink,insights.metrics(views)}",
+      );
+    }
+
+    const insightsParams = new URLSearchParams({
+      access_token: accessToken,
+      limit,
+      fields: insightsFieldParts.join(","),
+      username,
+    });
+
+    if (appSecret) {
+      const appSecretProof = createHmac("sha256", appSecret).update(accessToken).digest("hex");
+      insightsParams.set("appsecret_proof", appSecretProof);
+    }
+
+    const insightsUrl = `https://graph.facebook.com/${graphVersion}/${igUserId}/creator_marketplace_creators?${insightsParams.toString()}`;
+    const insightsResponse = await fetch(insightsUrl, { method: "GET", next: { revalidate: 0 } });
+    const insightsPayload = (await insightsResponse.json()) as CreatorMarketplaceResponse;
+
+    rawApiResponses.push({
+      type: "insights_by_username_requested",
+      url: redactSensitiveQueryParams(insightsUrl),
+      status: insightsResponse.status,
+      ok: insightsResponse.ok,
+      payload: sanitizeRawPayload(insightsPayload),
+    });
+
+    if (!insightsResponse.ok || insightsPayload.error) {
+      const code = insightsPayload.error?.code;
+      const subcode = insightsPayload.error?.error_subcode;
+      const trace = insightsPayload.error?.fbtrace_id;
+      const message = insightsPayload.error?.message ?? "Creator Insights API request failed.";
+
+      const parts = [message, code ? `code=${code}` : "", subcode ? `subcode=${subcode}` : "", trace ? `fbtrace_id=${trace}` : ""].filter(Boolean);
+
+      const rawCapturePath = await persistRawApiCapture({
+        request: { username: username ?? "", query: query ?? "", includeInsights, includeMedia, limit: Number(limit) },
+        calls: rawApiResponses,
+      });
+
+      return NextResponse.json({ error: parts.join(" | "), rawApiResponses, rawCapturePath }, { status: insightsResponse.status || 500 });
+    }
+
+    const creatorsFromInsights = insightsPayload.data ?? [];
+
+    if (!Array.isArray(creatorsFromInsights) || creatorsFromInsights.length === 0) {
+      const rawCapturePath = await persistRawApiCapture({
+        request: { username: username ?? "", query: query ?? "", includeInsights, includeMedia, limit: Number(limit) },
+        calls: rawApiResponses,
+      });
+
+      return NextResponse.json(
+        {
+          error: `No Creator Insights record found for username=@${username}.`,
+          rawApiResponses,
+          rawCapturePath,
+        },
+        { status: 404 },
+      );
+    }
+
+    const effectiveRecord = creatorsFromInsights[0] as Record<string, unknown>;
+
+    const creators = toCreatorList(creatorsFromInsights as Array<Record<string, unknown>>);
+
+    const rawCapturePath = await persistRawApiCapture({
+      request: { username: username ?? "", query: query ?? "", includeInsights, includeMedia, limit: Number(limit) },
+      calls: rawApiResponses,
+    });
+
+    return NextResponse.json({
+      request: { username: username ?? "", query: query ?? "", includeInsights, includeMedia, limit: Number(limit) },
+      discoveredCreatorId: effectiveRecord.id ?? "",
+      discoveredCreatorUsername: typeof effectiveRecord.username === "string" ? effectiveRecord.username : "",
+      insightsLookupMethod: "username_insights_direct",
+      insightsLookupExplanation: "Insights were fetched directly using the username parameter on creator_marketplace_creators.",
+      rawApiResponses,
+      rawCapturePath,
+      creators,
+      analyticsSnapshot: extractAnalyticsSnapshot(effectiveRecord),
+      topLevel: toTableRows(effectiveRecord, ["insights", "recent_media", "branded_content_media"]),
+      creatorInsights: extractInsightsRows(effectiveRecord),
+      recentMedia: extractMediaRows(effectiveRecord, "recent_media"),
+      brandedContentMedia: extractMediaRows(effectiveRecord, "branded_content_media"),
+      rawCount: creatorsFromInsights.length,
+      isLikelyMockData: typeof effectiveRecord.username === "string" ? effectiveRecord.username.startsWith("mocked_") || effectiveRecord.username.startsWith("test_") : false,
+    });
+  }
+
   if (username) {
     discoveryParams.set("username", username);
   }
