@@ -50,7 +50,8 @@ type RawApiResponseCapture = {
     | "insights_by_creator_ids"
     | "insights_total_followers"
     | "insights_this_month"
-    | "insights_last_90_days";
+    | "insights_last_90_days"
+    | "insights_variant";
   url: string;
   status: number;
   ok: boolean;
@@ -808,24 +809,43 @@ export async function GET(request: NextRequest) {
     const effectiveRecord = creatorsFromInsights[0] as Record<string, unknown>;
 
     if (includeInsights) {
-      const insightVariants: Array<{
-        type: RawApiResponseCapture["type"];
-        fields: string;
-      }> = [
-        {
-          type: "insights_total_followers",
-          fields: "insights.metrics(total_followers)",
-        },
-        {
-          type: "insights_this_month",
-          fields:
-            "insights.metrics(creator_engaged_accounts,creator_reach).time_range(this_month).breakdown(follow_type,gender,age,top_countries,top_cities,media_type)",
-        },
-        {
-          type: "insights_last_90_days",
-          fields: "insights.metrics(reels_interaction_rate,reels_hook_rate).time_range(last_90_days)",
-        },
+      const insightVariants: Array<{ fields: string }> = [
+        { fields: "insights.metrics(total_followers)" },
       ];
+
+      const engagedTimeRanges = ["this_week", "last_14_days", "this_month"];
+      const engagedBreakdowns = ["follow_type", "gender", "age", "top_countries", "top_cities"];
+      for (const timeRange of engagedTimeRanges) {
+        insightVariants.push({
+          fields: `insights.metrics(creator_engaged_accounts).time_range(${timeRange})`,
+        });
+
+        for (const breakdown of engagedBreakdowns) {
+          insightVariants.push({
+            fields:
+              `insights.metrics(creator_engaged_accounts).time_range(${timeRange}).breakdown(${breakdown})`,
+          });
+        }
+      }
+
+      const reachTimeRanges = ["this_week", "last_14_days", "this_month"];
+      const reachBreakdowns = ["follow_type", "media_type"];
+      for (const timeRange of reachTimeRanges) {
+        insightVariants.push({
+          fields: `insights.metrics(creator_reach).time_range(${timeRange})`,
+        });
+
+        for (const breakdown of reachBreakdowns) {
+          insightVariants.push({
+            fields: `insights.metrics(creator_reach).time_range(${timeRange}).breakdown(${breakdown})`,
+          });
+        }
+      }
+
+      insightVariants.push(
+        { fields: "insights.metrics(reels_interaction_rate).time_range(last_90_days)" },
+        { fields: "insights.metrics(reels_hook_rate).time_range(last_90_days)" },
+      );
 
       for (const variant of insightVariants) {
         const variantParams = new URLSearchParams({
@@ -850,7 +870,7 @@ export async function GET(request: NextRequest) {
         const variantPayload = (await variantResponse.json()) as CreatorMarketplaceResponse;
 
         rawApiResponses.push({
-          type: variant.type,
+          type: "insights_variant",
           url: redactSensitiveQueryParams(variantUrl),
           status: variantResponse.status,
           ok: variantResponse.ok,
