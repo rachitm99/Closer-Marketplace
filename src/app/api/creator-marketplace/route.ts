@@ -47,7 +47,10 @@ type RawApiResponseCapture = {
     | "discovery"
     | "insights_by_username_requested"
     | "insights_by_username_discovered"
-    | "insights_by_creator_ids";
+    | "insights_by_creator_ids"
+    | "insights_total_followers"
+    | "insights_this_month"
+    | "insights_last_90_days";
   url: string;
   status: number;
   ok: boolean;
@@ -485,6 +488,34 @@ function toCreatorList(items: Array<Record<string, unknown>>): CreatorListItem[]
   });
 }
 
+function mergeInsightsData(
+  baseRecord: Record<string, unknown>,
+  nextRecord: Record<string, unknown>,
+): void {
+  const baseInsights =
+    (baseRecord.insights as { data?: Array<Record<string, unknown>> } | undefined)?.data ?? [];
+  const nextInsights =
+    (nextRecord.insights as { data?: Array<Record<string, unknown>> } | undefined)?.data ?? [];
+
+  if (!nextInsights.length) {
+    return;
+  }
+
+  const merged: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+
+  for (const item of [...baseInsights, ...nextInsights]) {
+    const key = JSON.stringify(item);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(item);
+  }
+
+  baseRecord.insights = { data: merged };
+}
+
 function findExactUsernameMatch(
   items: Array<Record<string, unknown>>,
   requestedUsername: string,
@@ -707,15 +738,8 @@ export async function GET(request: NextRequest) {
     const rawApiResponses: RawApiResponseCapture[] = [];
 
     const insightsFieldParts = ["id", "username", "name", "country", "gender", "followers_count"];
-    if (includeInsights) {
-      insightsFieldParts.push(
-        "insights.metrics(total_followers)",
-        "insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(follow_type,gender,age,top_countries,top_cities)",
-        "insights.metrics(creator_reach).time_range(this_month).breakdown(follow_type,media_type)",
-        "insights.metrics(reels_interaction_rate).time_range(last_90_days)",
-        "insights.metrics(reels_hook_rate).time_range(last_90_days)",
-      );
-    }
+    // Insights are fetched via separate calls below to avoid duplicate
+    // `insights` fields in one request (Graph syntax error code 2500).
     if (includeMedia) {
       insightsFieldParts.push(
         "branded_content_media{media_type,permalink,insights.metrics(views)}",
@@ -782,6 +806,67 @@ export async function GET(request: NextRequest) {
     }
 
     const effectiveRecord = creatorsFromInsights[0] as Record<string, unknown>;
+
+    if (includeInsights) {
+      const insightVariants: Array<{
+        type: RawApiResponseCapture["type"];
+        fields: string;
+      }> = [
+        {
+          type: "insights_total_followers",
+          fields: "insights.metrics(total_followers)",
+        },
+        {
+          type: "insights_this_month",
+          fields:
+            "insights.metrics(creator_engaged_accounts,creator_reach).time_range(this_month).breakdown(follow_type,gender,age,top_countries,top_cities,media_type)",
+        },
+        {
+          type: "insights_last_90_days",
+          fields: "insights.metrics(reels_interaction_rate,reels_hook_rate).time_range(last_90_days)",
+        },
+      ];
+
+      for (const variant of insightVariants) {
+        const variantParams = new URLSearchParams({
+          access_token: accessToken,
+          limit,
+          fields: variant.fields,
+          username,
+        });
+
+        if (appSecret) {
+          const appSecretProof = createHmac("sha256", appSecret)
+            .update(accessToken)
+            .digest("hex");
+          variantParams.set("appsecret_proof", appSecretProof);
+        }
+
+        const variantUrl = `https://graph.facebook.com/${graphVersion}/${igUserId}/creator_marketplace_creators?${variantParams.toString()}`;
+        const variantResponse = await fetch(variantUrl, {
+          method: "GET",
+          next: { revalidate: 0 },
+        });
+        const variantPayload = (await variantResponse.json()) as CreatorMarketplaceResponse;
+
+        rawApiResponses.push({
+          type: variant.type,
+          url: redactSensitiveQueryParams(variantUrl),
+          status: variantResponse.status,
+          ok: variantResponse.ok,
+          payload: sanitizeRawPayload(variantPayload),
+        });
+
+        if (
+          variantResponse.ok &&
+          !variantPayload.error &&
+          (variantPayload.data?.length ?? 0) > 0
+        ) {
+          const variantRecord = variantPayload.data?.[0] as Record<string, unknown>;
+          mergeInsightsData(effectiveRecord, variantRecord);
+        }
+      }
+    }
 
     const creators = toCreatorList(creatorsFromInsights as Array<Record<string, unknown>>);
 
@@ -962,11 +1047,7 @@ export async function GET(request: NextRequest) {
 
     if (includeInsights) {
       insightsFieldParts.push(
-        "insights.metrics(total_followers)",
-        "insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(follow_type,gender,age,top_countries,top_cities)",
-        "insights.metrics(creator_reach).time_range(this_month).breakdown(follow_type,media_type)",
-        "insights.metrics(reels_interaction_rate).time_range(last_90_days)",
-        "insights.metrics(reels_hook_rate).time_range(last_90_days)",
+        "insights.metrics(total_followers,creator_engaged_accounts,creator_reach,reels_interaction_rate,reels_hook_rate).breakdown(follow_type,gender,age,top_countries,top_cities,media_type)",
       );
     }
 
