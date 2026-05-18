@@ -13,6 +13,17 @@ type CreatorMarketplaceResult = {
     insights: Record<string, string | number>;
   }>;
 };
+// (added) optional debug fields returned by the API
+type CreatorMarketplaceResultDebug = CreatorMarketplaceResult & {
+  rawApiResponses?: Array<Record<string, unknown>>;
+  rawCapturePath?: string;
+  request?: Record<string, unknown>;
+  discoveredCreatorId?: string;
+  discoveredCreatorUsername?: string;
+  insightsLookupMethod?: string;
+  insightsLookupExplanation?: string;
+  analyticsSnapshot?: Record<string, unknown>;
+};
 
 type SessionState = {
   authenticated: boolean;
@@ -28,7 +39,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [marketplaceData, setMarketplaceData] = useState<CreatorMarketplaceResult | null>(null);
+  const [marketplaceData, setMarketplaceData] = useState<CreatorMarketplaceResultDebug | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
   const [session, setSession] = useState<SessionState>({ authenticated: false });
 
   const username = useMemo(() => usernameInput.replace(/@/g, "").trim(), [usernameInput]);
@@ -243,9 +255,18 @@ export default function DashboardPage() {
               }}
             >
               <h2>Creators</h2>
-              <button type="button" className="secondary-btn" onClick={onExportCsv}>
-                Export CSV
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <button type="button" className="secondary-btn" onClick={onExportCsv}>
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setShowRaw((s) => !s)}
+                >
+                  {showRaw ? "Hide Raw API" : "Show Raw API"}
+                </button>
+              </div>
             </div>
 
             <div
@@ -286,6 +307,33 @@ export default function DashboardPage() {
                 </article>
               ))}
             </div>
+            {showRaw ? (
+              <section style={{ marginTop: "1rem" }}>
+                <h3 style={{ marginBottom: "0.5rem" }}>Raw API Responses</h3>
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <strong>rawCapturePath:</strong> {marketplaceData?.rawCapturePath ?? "(none)"}
+                </div>
+                <pre
+                  style={{
+                    background: "#0f1720",
+                    color: "#e6eef8",
+                    padding: "0.75rem",
+                    borderRadius: "8px",
+                    overflowX: "auto",
+                    maxHeight: "480px",
+                  }}
+                >
+                  {JSON.stringify(
+                    {
+                      request: marketplaceData?.request ?? {},
+                      rawApiResponses: marketplaceData?.rawApiResponses ?? [],
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </section>
+            ) : null}
           </section>
         ) : null}
       </main>
