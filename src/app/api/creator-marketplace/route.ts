@@ -708,7 +708,13 @@ export async function GET(request: NextRequest) {
 
     const insightsFieldParts = ["id", "username", "name", "country", "gender", "followers_count"];
     if (includeInsights) {
-      insightsFieldParts.push("insights");
+      insightsFieldParts.push(
+        "insights.metrics(total_followers)",
+        "insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(follow_type,gender,age,top_countries,top_cities)",
+        "insights.metrics(creator_reach).time_range(this_month).breakdown(follow_type,media_type)",
+        "insights.metrics(reels_interaction_rate).time_range(last_90_days)",
+        "insights.metrics(reels_hook_rate).time_range(last_90_days)",
+      );
     }
     if (includeMedia) {
       insightsFieldParts.push(
@@ -955,7 +961,13 @@ export async function GET(request: NextRequest) {
     const insightsFieldParts = ["id", "username", "name", "country", "gender", "followers_count"];
 
     if (includeInsights) {
-      insightsFieldParts.push("insights");
+      insightsFieldParts.push(
+        "insights.metrics(total_followers)",
+        "insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(follow_type,gender,age,top_countries,top_cities)",
+        "insights.metrics(creator_reach).time_range(this_month).breakdown(follow_type,media_type)",
+        "insights.metrics(reels_interaction_rate).time_range(last_90_days)",
+        "insights.metrics(reels_hook_rate).time_range(last_90_days)",
+      );
     }
 
     if (includeMedia) {
