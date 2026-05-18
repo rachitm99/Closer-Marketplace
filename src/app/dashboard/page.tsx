@@ -273,7 +273,7 @@ function ApiCallCard({ response }: { response: RawApiResponse }) {
                   <div style={{ marginTop: "0.5rem", display: "grid", gap: "0.5rem" }}>
                     {breakdowns.results.map((result) => (
                       <div
-                        key={`${response.type}-${item.name}-${breakdowns.dimension_key}-${result.dimension_value}`}
+                        key={`${response.type}-${item.name}-${breakdowns.dimension_key}-${result.dimensionValue}`}
                         style={{
                           display: "grid",
                           gridTemplateColumns: "1fr auto",
@@ -285,7 +285,7 @@ function ApiCallCard({ response }: { response: RawApiResponse }) {
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{result.dimension_value}</div>
+                          <div style={{ fontWeight: 600, fontSize: "0.92rem" }}>{result.dimensionValue}</div>
                           <div style={{ fontSize: "0.78rem", color: "rgba(15,23,42,0.62)" }}>
                             {result.value !== undefined ? `Value: ${formatMetricValue(result.value)}` : ""}
                           </div>
