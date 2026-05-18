@@ -809,9 +809,9 @@ export async function GET(request: NextRequest) {
     const effectiveRecord = creatorsFromInsights[0] as Record<string, unknown>;
 
     if (includeInsights) {
-      const insightVariants: Array<{ fields: string }> = [
-        { fields: "insights.metrics(total_followers)" },
-      ];
+      const insightVariants: Array<{ fields: string }> = [];
+
+      insightVariants.push({ fields: "insights.metrics(total_followers)" });
 
       const engagedTimeRanges = ["this_week", "last_14_days", "this_month"];
       const engagedBreakdowns = ["follow_type", "gender", "age", "top_countries", "top_cities"];
@@ -819,13 +819,11 @@ export async function GET(request: NextRequest) {
         insightVariants.push({
           fields: `insights.metrics(creator_engaged_accounts).time_range(${timeRange})`,
         });
-
-        for (const breakdown of engagedBreakdowns) {
-          insightVariants.push({
-            fields:
-              `insights.metrics(creator_engaged_accounts).time_range(${timeRange}).breakdown(${breakdown})`,
-          });
-        }
+      }
+      for (const breakdown of engagedBreakdowns) {
+        insightVariants.push({
+          fields: `insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(${breakdown})`,
+        });
       }
 
       const reachTimeRanges = ["this_week", "last_14_days", "this_month"];
@@ -834,12 +832,11 @@ export async function GET(request: NextRequest) {
         insightVariants.push({
           fields: `insights.metrics(creator_reach).time_range(${timeRange})`,
         });
-
-        for (const breakdown of reachBreakdowns) {
-          insightVariants.push({
-            fields: `insights.metrics(creator_reach).time_range(${timeRange}).breakdown(${breakdown})`,
-          });
-        }
+      }
+      for (const breakdown of reachBreakdowns) {
+        insightVariants.push({
+          fields: `insights.metrics(creator_reach).time_range(this_month).breakdown(${breakdown})`,
+        });
       }
 
       insightVariants.push(
