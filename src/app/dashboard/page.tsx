@@ -163,242 +163,69 @@ function extractInstagramUsernames(text: string): string[] {
   return Array.from(usernames);
 }
 
-function SelectedFieldsTable({
-  creator,
-  snapshot,
-}: {
-  creator?: CreatorMarketplaceResult["creators"][number];
-  snapshot?: CreatorMarketplaceResultDebug["analyticsSnapshot"];
-}) {
-  const totalFollowers = formatMetricValue(
-    creator?.insights?.total_followers ?? creator?.insights?.followers_count,
-  );
-  const topCities = snapshot?.topCities ?? [];
-
-  const columns = [
-    { label: "Total follower", subLabel: "Lifetime overall", value: totalFollowers },
-    { label: "Reels interaction rate", subLabel: "Last 90 days", value: snapshot?.interactionRatePct ?? "-" },
-    { label: "Age 18 - 24", subLabel: "Audience split", value: snapshot?.age18To24Pct ?? "-" },
-    { label: "Age 25 - 34", subLabel: "Audience split", value: snapshot?.age25To34Pct ?? "-" },
-    { label: "Age 35 - 44", subLabel: "Audience split", value: snapshot?.age35To44Pct ?? "-" },
-    { label: "Male %", subLabel: "Audience split", value: snapshot?.malePct ?? "-" },
-    { label: "Female %", subLabel: "Audience split", value: snapshot?.femalePct ?? "-" },
-    { label: "Top city 1", subLabel: "Top locations", value: topCities[0] ?? "-" },
-    { label: "Top city 2", subLabel: "Top locations", value: topCities[1] ?? "-" },
-    { label: "Top city 3", subLabel: "Top locations", value: topCities[2] ?? "-" },
-  ];
+function RawResponseCard({ result }: { result: LookupResult }) {
+  const payload = result.data ?? { error: result.error ?? "Unknown error" };
+  const rawJson = JSON.stringify(payload, null, 2);
 
   return (
-    <section
+    <article
       style={{
-        borderRadius: "18px",
-        border: "1px solid rgba(15,23,42,0.1)",
-        background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
-        boxShadow: "0 14px 36px rgba(15,23,42,0.08)",
-        overflow: "hidden",
+        border: "1px solid rgba(15,23,42,0.12)",
+        borderRadius: "14px",
+        padding: "0.95rem",
+        background: "#ffffff",
+        boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
       }}
     >
-      <div style={{ padding: "1rem 1rem 0.7rem", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-          <div>
-            <p style={{ margin: 0, fontSize: "0.76rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(15,23,42,0.55)" }}>
-              Excel view
-            </p>
-            <h3 style={{ margin: "0.35rem 0 0", fontSize: "1.05rem" }}>
-              Selected fields for {creator?.username ? `@${creator.username}` : "the loaded creator"}
-            </h3>
-          </div>
-          <div style={{ fontSize: "0.84rem", color: "rgba(15,23,42,0.68)", alignSelf: "end" }}>
-            Showing only the requested columns
-          </div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start" }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "0.98rem" }}>
+            {result.requestedUsername ? `@${result.requestedUsername}` : result.requestedInput}
+          </h3>
+          <p style={{ margin: "0.25rem 0 0", fontSize: "0.78rem", color: "rgba(15,23,42,0.65)" }}>
+            {result.error ? "error" : "success"}
+          </p>
         </div>
-      </div>
-
-      <div style={{ overflowX: "auto" }}>
-        <table
+        <span
           style={{
-            width: "100%",
-            minWidth: "1200px",
-            borderCollapse: "separate",
-            borderSpacing: 0,
+            padding: "0.25rem 0.55rem",
+            borderRadius: "999px",
+            background: result.error ? "rgba(239,68,68,0.12)" : "rgba(34,197,94,0.12)",
+            color: result.error ? "#b91c1c" : "#15803d",
+            fontSize: "0.75rem",
+            fontWeight: 700,
           }}
         >
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column.label}
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1,
-                    textAlign: "left",
-                    padding: "0.95rem 1rem",
-                    background: "#edf5ff",
-                    borderBottom: "1px solid rgba(15,23,42,0.1)",
-                    borderRight: "1px solid rgba(15,23,42,0.08)",
-                    verticalAlign: "bottom",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#10243e" }}>{column.label}</div>
-                  <div style={{ marginTop: "0.2rem", fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(16,36,62,0.55)" }}>
-                    {column.subLabel}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              {columns.map((column, index) => (
-                <td
-                  key={`${column.label}-${index}`}
-                  style={{
-                    padding: "1rem",
-                    borderBottom: "1px solid rgba(15,23,42,0.08)",
-                    borderRight: "1px solid rgba(15,23,42,0.06)",
-                    background: index % 2 === 0 ? "#ffffff" : "#f9fcff",
-                    fontSize: "0.98rem",
-                    fontWeight: 700,
-                    color: "#0f172a",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {column.value}
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function SelectedFieldsBatchTable({ results }: { results: LookupResult[] }) {
-  const columns = [
-    { label: "Username", subLabel: "Instagram account" },
-    { label: "Total follower", subLabel: "Lifetime overall" },
-    { label: "Reels interaction rate", subLabel: "Last 90 days" },
-    { label: "Age 18 - 24", subLabel: "Audience split" },
-    { label: "Age 25 - 34", subLabel: "Audience split" },
-    { label: "Age 35 - 44", subLabel: "Audience split" },
-    { label: "Male %", subLabel: "Audience split" },
-    { label: "Female %", subLabel: "Audience split" },
-    { label: "Top city 1", subLabel: "Top locations" },
-    { label: "Top city 2", subLabel: "Top locations" },
-    { label: "Top city 3", subLabel: "Top locations" },
-  ];
-
-  return (
-    <section
-      style={{
-        borderRadius: "18px",
-        border: "1px solid rgba(15,23,42,0.1)",
-        background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
-        boxShadow: "0 14px 36px rgba(15,23,42,0.08)",
-        overflow: "hidden",
-      }}
-    >
-      <div style={{ padding: "1rem 1rem 0.7rem", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-          <div>
-            <p style={{ margin: 0, fontSize: "0.76rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(15,23,42,0.55)" }}>
-              Excel view
-            </p>
-            <h3 style={{ margin: "0.35rem 0 0", fontSize: "1.05rem" }}>
-              Selected fields for {results.length} account{results.length === 1 ? "" : "s"}
-            </h3>
-          </div>
-          <div style={{ fontSize: "0.84rem", color: "rgba(15,23,42,0.68)", alignSelf: "end" }}>
-            Showing only the requested columns
-          </div>
-        </div>
+          {result.error ? "Error" : "Success"}
+        </span>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table
+      {result.error ? (
+        <p style={{ margin: "0.8rem 0 0", color: "#b91c1c", fontSize: "0.86rem" }}>{result.error}</p>
+      ) : null}
+
+      <details open style={{ marginTop: "0.85rem" }}>
+        <summary style={{ cursor: "pointer", fontSize: "0.82rem", color: "rgba(15,23,42,0.7)" }}>
+          View raw JSON response
+        </summary>
+        <pre
           style={{
-            width: "100%",
-            minWidth: "1500px",
-            borderCollapse: "separate",
-            borderSpacing: 0,
+            marginTop: "0.75rem",
+            padding: "0.9rem",
+            borderRadius: "12px",
+            background: "#0b1220",
+            color: "#dbe7ff",
+            overflowX: "auto",
+            fontSize: "0.78rem",
+            lineHeight: 1.5,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
           }}
         >
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column.label}
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1,
-                    textAlign: "left",
-                    padding: "0.95rem 1rem",
-                    background: "#edf5ff",
-                    borderBottom: "1px solid rgba(15,23,42,0.1)",
-                    borderRight: "1px solid rgba(15,23,42,0.08)",
-                    verticalAlign: "bottom",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#10243e" }}>{column.label}</div>
-                  <div style={{ marginTop: "0.2rem", fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(16,36,62,0.55)" }}>
-                    {column.subLabel}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((result, rowIndex) => {
-              const data = result.data;
-              const snapshot = data?.analyticsSnapshot;
-              const creator = data?.creators?.[0];
-              const topCities = snapshot?.topCities ?? [];
-
-              const cells = [
-                result.requestedUsername ? `@${result.requestedUsername}` : result.requestedInput,
-                formatMetricValue(creator?.insights?.total_followers ?? creator?.insights?.followers_count),
-                snapshot?.interactionRatePct ?? (result.error ? "-" : "-"),
-                snapshot?.age18To24Pct ?? "-",
-                snapshot?.age25To34Pct ?? "-",
-                snapshot?.age35To44Pct ?? "-",
-                snapshot?.malePct ?? "-",
-                snapshot?.femalePct ?? "-",
-                topCities[0] ?? "-",
-                topCities[1] ?? "-",
-                topCities[2] ?? "-",
-              ];
-
-              return (
-                <tr key={`${result.requestedUsername}-${rowIndex}`}>
-                  {cells.map((cell, cellIndex) => (
-                    <td
-                      key={`${result.requestedUsername}-${rowIndex}-${cellIndex}`}
-                      style={{
-                        padding: "1rem",
-                        borderBottom: "1px solid rgba(15,23,42,0.08)",
-                        borderRight: "1px solid rgba(15,23,42,0.06)",
-                        background: rowIndex % 2 === 0 ? "#ffffff" : "#f9fcff",
-                        fontSize: cellIndex === 0 ? "0.95rem" : "0.98rem",
-                        fontWeight: cellIndex === 0 ? 800 : 700,
-                        color: cellIndex === 0 && result.error ? "#b91c1c" : "#0f172a",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          {rawJson}
+        </pre>
+      </details>
+    </article>
   );
 }
 
@@ -839,8 +666,10 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div style={{ marginBottom: "1.25rem" }}>
-              <SelectedFieldsBatchTable results={batchResults} />
+            <div style={{ marginBottom: "1.25rem", display: "grid", gap: "0.85rem" }}>
+              {batchResults.map((result) => (
+                <RawResponseCard key={`${result.requestedUsername}-${result.requestedInput}`} result={result} />
+              ))}
             </div>
             {showRaw ? (
               <section style={{ marginTop: "1.25rem" }}>
