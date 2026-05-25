@@ -232,12 +232,18 @@ function RawResponseCard({ result }: { result: LookupResult }) {
 function CombinedRawJsonCard({ results }: { results: LookupResult[] }) {
   const combinedPayload = {
     generatedAt: new Date().toISOString(),
-    accounts: results.map((result) => ({
+    lookups: results.map((result) => ({
       requestedInput: result.requestedInput,
       requestedUsername: result.requestedUsername,
       error: result.error ?? null,
-      response: result.data ?? null,
+      discoveredCreatorId: result.data?.discoveredCreatorId ?? null,
+      discoveredCreatorUsername: result.data?.discoveredCreatorUsername ?? null,
+      insightsLookupMethod: result.data?.insightsLookupMethod ?? null,
+      insightsLookupExplanation: result.data?.insightsLookupExplanation ?? null,
+      request: result.data?.request ?? null,
+      rawCapturePath: result.data?.rawCapturePath ?? null,
     })),
+    rawApiResponses: results.flatMap((result) => result.data?.rawApiResponses ?? []),
   };
   const rawJson = JSON.stringify(combinedPayload, null, 2);
 
@@ -255,7 +261,7 @@ function CombinedRawJsonCard({ results }: { results: LookupResult[] }) {
         <div>
           <h3 style={{ margin: 0, fontSize: "0.98rem" }}>Combined raw JSON</h3>
           <p style={{ margin: "0.25rem 0 0", fontSize: "0.78rem", color: "rgba(15,23,42,0.65)" }}>
-            All lookup responses in one pasteable object
+            Flattened raw API responses plus lookup metadata in one pasteable object
           </p>
         </div>
         <span
