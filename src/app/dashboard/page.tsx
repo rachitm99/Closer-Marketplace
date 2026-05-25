@@ -229,6 +229,74 @@ function RawResponseCard({ result }: { result: LookupResult }) {
   );
 }
 
+function CombinedRawJsonCard({ results }: { results: LookupResult[] }) {
+  const combinedPayload = {
+    generatedAt: new Date().toISOString(),
+    accounts: results.map((result) => ({
+      requestedInput: result.requestedInput,
+      requestedUsername: result.requestedUsername,
+      error: result.error ?? null,
+      response: result.data ?? null,
+    })),
+  };
+  const rawJson = JSON.stringify(combinedPayload, null, 2);
+
+  return (
+    <article
+      style={{
+        border: "1px solid rgba(15,23,42,0.12)",
+        borderRadius: "14px",
+        padding: "0.95rem",
+        background: "#ffffff",
+        boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start" }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "0.98rem" }}>Combined raw JSON</h3>
+          <p style={{ margin: "0.25rem 0 0", fontSize: "0.78rem", color: "rgba(15,23,42,0.65)" }}>
+            All lookup responses in one pasteable object
+          </p>
+        </div>
+        <span
+          style={{
+            padding: "0.25rem 0.55rem",
+            borderRadius: "999px",
+            background: "rgba(59,130,246,0.12)",
+            color: "#1d4ed8",
+            fontSize: "0.75rem",
+            fontWeight: 700,
+          }}
+        >
+          JSON
+        </span>
+      </div>
+
+      <details open style={{ marginTop: "0.85rem" }}>
+        <summary style={{ cursor: "pointer", fontSize: "0.82rem", color: "rgba(15,23,42,0.7)" }}>
+          View combined JSON
+        </summary>
+        <pre
+          style={{
+            marginTop: "0.75rem",
+            padding: "0.9rem",
+            borderRadius: "12px",
+            background: "#0b1220",
+            color: "#dbe7ff",
+            overflowX: "auto",
+            fontSize: "0.78rem",
+            lineHeight: 1.5,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {rawJson}
+        </pre>
+      </details>
+    </article>
+  );
+}
+
 function ApiCallCard({ response }: { response: RawApiResponse }) {
   const data = response.payload?.data;
   const first = Array.isArray(data) ? (data[0] as Record<string, unknown> | undefined) : undefined;
@@ -667,9 +735,7 @@ export default function DashboardPage() {
             </div>
 
             <div style={{ marginBottom: "1.25rem", display: "grid", gap: "0.85rem" }}>
-              {batchResults.map((result) => (
-                <RawResponseCard key={`${result.requestedUsername}-${result.requestedInput}`} result={result} />
-              ))}
+              <CombinedRawJsonCard results={batchResults} />
             </div>
             {showRaw ? (
               <section style={{ marginTop: "1.25rem" }}>
