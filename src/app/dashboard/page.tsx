@@ -306,7 +306,13 @@ function readMetricByBreakdown(
 
         const totalValue = (insight.total_value as { value?: string | number; breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined) ?? undefined;
         if (totalValue?.breakdowns?.dimension_key === dimensionKey) {
-          return totalValue;
+          return {
+            value: totalValue.value,
+            breakdowns: {
+              dimensionKey: totalValue.breakdowns.dimension_key,
+              results: totalValue.breakdowns.results,
+            },
+          };
         }
       }
     }
