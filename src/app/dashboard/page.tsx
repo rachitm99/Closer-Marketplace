@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Spreadsheet, { type CellBase, type Matrix } from "react-spreadsheet";
 
 type CreatorMarketplaceResult = {
   creators: Array<{
@@ -395,16 +396,17 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
     { label: "Top city 3", key: "topCity3" },
   ] as const;
 
-  const csvText = useMemo(() => {
-    const headers = columns.map((column) => column.label);
-    const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-    return [
-      headers,
-      ...rows.map((row) => columns.map((column) => String(row[column.key] ?? ""))),
-    ]
-      .map((row) => row.map((cell) => csvEscape(String(cell))).join(","))
-      .join("\n");
+  const sheetData = useMemo<Matrix<CellBase<string>>>(() => {
+    return rows.map((row) =>
+      columns.map((column) => ({
+        value: String(row[column.key] ?? "-"),
+        readOnly: true,
+      })),
+    );
   }, [columns, rows]);
+
+  const rowLabels = useMemo(() => rows.map((row, index) => row.requestedUsername || String(index + 1)), [rows]);
+  const columnLabels = useMemo(() => columns.map((column) => column.label), [columns]);
 
   return (
     <section
@@ -427,75 +429,20 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
             </h3>
           </div>
           <div style={{ fontSize: "0.84rem", color: "rgba(15,23,42,0.68)", alignSelf: "end" }}>
-            Values are parsed from the API response collection below
+            This is an in-browser spreadsheet populated from the parsed API responses
           </div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gap: "1rem" }}>
-        <section style={{ padding: "0 1rem 1rem" }}>
-          <div style={{ marginBottom: "0.5rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(15,23,42,0.55)" }}>
-            CSV viewer
-          </div>
-          <textarea
-            readOnly
-            value={csvText}
-            rows={Math.max(8, rows.length + 2)}
-            style={{
-              width: "100%",
-              minHeight: "220px",
-              resize: "vertical",
-              borderRadius: "12px",
-              border: "1px solid rgba(15,23,42,0.12)",
-              background: "#0b1220",
-              color: "#dbe7ff",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-              fontSize: "0.8rem",
-              lineHeight: 1.5,
-              padding: "0.9rem",
-              boxSizing: "border-box",
-              whiteSpace: "pre",
-            }}
+      <div style={{ padding: "1rem" }}>
+        <div style={{ borderRadius: "14px", border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", background: "#fff" }}>
+          <Spreadsheet
+            data={sheetData}
+            columnLabels={columnLabels}
+            rowLabels={rowLabels}
+            hideRowIndicators={false}
+            hideColumnIndicators={false}
           />
-          <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "rgba(15,23,42,0.62)" }}>
-            You can select any cell or column text directly here like a CSV viewer.
-          </p>
-        </section>
-
-        <div style={{ overflowX: "auto", padding: "0 1rem 1rem" }}>
-          <table
-            style={{
-              width: "100%",
-              minWidth: "1400px",
-              borderCollapse: "separate",
-              borderSpacing: 0,
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-              fontSize: "0.82rem",
-            }}
-          >
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", padding: "0.75rem", background: "#edf5ff", borderBottom: "1px solid rgba(15,23,42,0.1)", borderRight: "1px solid rgba(15,23,42,0.08)", width: "72px" }}>#</th>
-                {columns.map((column) => (
-                  <th key={column.key} style={{ textAlign: "left", padding: "0.75rem", background: "#edf5ff", borderBottom: "1px solid rgba(15,23,42,0.1)", borderRight: "1px solid rgba(15,23,42,0.08)" }}>
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rowIndex) => (
-                <tr key={`${row.requestedUsername}-${rowIndex}`}>
-                  <td style={{ padding: "0.75rem", borderBottom: "1px solid rgba(15,23,42,0.08)", borderRight: "1px solid rgba(15,23,42,0.06)", background: rowIndex % 2 === 0 ? "#ffffff" : "#f9fcff", color: "rgba(15,23,42,0.55)" }}>{rowIndex + 1}</td>
-                  {columns.map((column) => (
-                    <td key={`${row.requestedUsername}-${rowIndex}-${column.key}`} style={{ padding: "0.75rem", borderBottom: "1px solid rgba(15,23,42,0.08)", borderRight: "1px solid rgba(15,23,42,0.06)", background: rowIndex % 2 === 0 ? "#ffffff" : "#f9fcff", whiteSpace: "nowrap" }}>
-                      {String(row[column.key] ?? "-")}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </div>
     </section>
