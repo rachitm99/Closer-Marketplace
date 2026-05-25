@@ -248,6 +248,10 @@ type ParsedAccountRow = {
   topCity3: string;
 };
 
+type SheetSelection =
+  | { kind: "cell"; rowIndex: number; columnKey: keyof ParsedAccountRow }
+  | { kind: "column"; columnKey: keyof ParsedAccountRow };
+
 function readMetricByName(
   responses: Array<Record<string, unknown>>,
   metricName: string,
@@ -380,6 +384,7 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
 
 function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
   const rows = results.map((result) => parseLookupResult(result));
+  const [selection, setSelection] = useState<SheetSelection | null>(null);
 
   const columns = [
     { label: "Username", key: "requestedUsername" },
@@ -394,6 +399,42 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
     { label: "Top city 2", key: "topCity2" },
     { label: "Top city 3", key: "topCity3" },
   ] as const;
+
+  const selectedColumn = selection?.kind === "column" ? selection.columnKey : selection?.columnKey ?? null;
+  const selectedCell = selection?.kind === "cell" ? selection : null;
+  const selectedValue = selectedCell ? rows[selectedCell.rowIndex]?.[selectedCell.columnKey] : null;
+
+  async function copySelection() {
+    if (!selection) {
+      return;
+    }
+
+    if (selection.kind === "column") {
+      const values = rows.map((row) => String(row[selection.columnKey] ?? ""));
+      await navigator.clipboard.writeText(values.join("\n"));
+      return;
+    }
+
+    const row = rows[selection.rowIndex];
+    if (!row) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(String(row[selection.columnKey] ?? ""));
+  }
+
+  async function copyCsv() {
+    const headers = columns.map((column) => column.label);
+    const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const csv = [
+      headers,
+      ...rows.map((row) => columns.map((column) => String(row[column.key] ?? ""))),
+    ]
+      .map((row) => row.map((cell) => csvEscape(String(cell))).join(","))
+      .join("\n");
+
+    await navigator.clipboard.writeText(csv);
+  }
 
   return (
     <section
@@ -419,6 +460,23 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
             Values are parsed from the API response collection below
           </div>
         </div>
+        <div style={{ marginTop: "0.75rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+          <button type="button" className="secondary-btn" onClick={copySelection} disabled={!selection}>
+            Copy selected {selection?.kind === "column" ? "column" : "cell"}
+          </button>
+          <button type="button" className="secondary-btn" onClick={copyCsv} disabled={!rows.length}>
+            Copy CSV
+          </button>
+          <span style={{ fontSize: "0.82rem", color: "rgba(15,23,42,0.65)" }}>
+            Click a header to select a column or click a cell to select one value.
+          </span>
+        </div>
+        {selection ? (
+          <div style={{ marginTop: "0.7rem", padding: "0.75rem 0.9rem", borderRadius: "12px", background: "rgba(37,99,235,0.08)", color: "#1d4ed8", fontSize: "0.85rem" }}>
+            Selected {selection.kind === "column" ? "column" : "cell"}: {selection.kind === "column" ? prettyLabel(String(selection.columnKey)) : `${prettyLabel(String(selection.columnKey))} · row ${selection.rowIndex + 1}`}
+            {selectedValue !== null ? ` · ${String(selectedValue)}` : ""}
+          </div>
+        ) : null}
       </div>
 
       <div style={{ overflowX: "auto" }}>
@@ -432,6 +490,25 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
         >
           <thead>
             <tr>
+              <th
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                  textAlign: "left",
+                  padding: "0.95rem 1rem",
+                  background: "#edf5ff",
+                  borderBottom: "1px solid rgba(15,23,42,0.1)",
+                  borderRight: "1px solid rgba(15,23,42,0.08)",
+                  verticalAlign: "bottom",
+                  whiteSpace: "nowrap",
+                  width: "72px",
+                }}
+              >
+                <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#10243e", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Row
+                </div>
+              </th>
               {columns.map((column) => (
                 <th
                   key={column.key}
@@ -441,12 +518,14 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
                     zIndex: 1,
                     textAlign: "left",
                     padding: "0.95rem 1rem",
-                    background: "#edf5ff",
+                    background: selectedColumn === column.key ? "#dbeafe" : "#edf5ff",
                     borderBottom: "1px solid rgba(15,23,42,0.1)",
                     borderRight: "1px solid rgba(15,23,42,0.08)",
                     verticalAlign: "bottom",
                     whiteSpace: "nowrap",
+                    cursor: "pointer",
                   }}
+                  onClick={() => setSelection({ kind: "column", columnKey: column.key })}
                 >
                   <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#10243e" }}>{column.label}</div>
                 </th>
@@ -456,8 +535,25 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
           <tbody>
             {rows.map((row, rowIndex) => (
               <tr key={`${row.requestedUsername}-${rowIndex}`}>
+                <td
+                  style={{
+                    padding: "1rem",
+                    borderBottom: "1px solid rgba(15,23,42,0.08)",
+                    borderRight: "1px solid rgba(15,23,42,0.06)",
+                    background: rowIndex % 2 === 0 ? "#ffffff" : "#f9fcff",
+                    color: "rgba(15,23,42,0.55)",
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {rowIndex + 1}
+                </td>
                 {columns.map((column, columnIndex) => {
                   const value = row[column.key];
+                  const isSelected =
+                    selectedCell?.rowIndex === rowIndex && selectedCell.columnKey === column.key;
+                  const isInSelectedColumn = selectedColumn === column.key;
                   return (
                     <td
                       key={`${row.requestedUsername}-${rowIndex}-${column.key}`}
@@ -465,12 +561,24 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
                         padding: "1rem",
                         borderBottom: "1px solid rgba(15,23,42,0.08)",
                         borderRight: "1px solid rgba(15,23,42,0.06)",
-                        background: rowIndex % 2 === 0 ? "#ffffff" : "#f9fcff",
+                        background: isSelected
+                          ? "#bfdbfe"
+                          : isInSelectedColumn
+                            ? rowIndex % 2 === 0
+                              ? "#eff6ff"
+                              : "#dbeafe"
+                            : rowIndex % 2 === 0
+                              ? "#ffffff"
+                              : "#f9fcff",
                         fontSize: columnIndex === 0 ? "0.95rem" : "0.98rem",
                         fontWeight: columnIndex === 0 ? 800 : 700,
                         color: columnIndex === 0 && row.error ? "#b91c1c" : "#0f172a",
                         whiteSpace: "nowrap",
+                        cursor: "pointer",
+                        outline: isSelected ? "2px solid #2563eb" : "none",
+                        outlineOffset: isSelected ? "-2px" : 0,
                       }}
+                      onClick={() => setSelection({ kind: "cell", rowIndex, columnKey: column.key })}
                     >
                       {String(value ?? "-")}
                     </td>
