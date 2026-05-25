@@ -280,8 +280,43 @@ function readMetricByName(
   return null;
 }
 
+function readMetricByBreakdown(
+  responses: Array<Record<string, unknown>>,
+  metricName: string,
+  dimensionKey: string,
+  timeRange?: string,
+): { value?: string | number; breakdowns?: { dimensionKey?: string; results?: Array<Record<string, unknown>> } } | null {
+  for (const response of responses as RawApiResponse[]) {
+    const data = response.payload?.data;
+    if (!Array.isArray(data)) {
+      continue;
+    }
+
+    for (const item of data) {
+      const insights = (item as { insights?: { data?: Array<Record<string, unknown>> } }).insights?.data ?? [];
+      for (const insight of insights) {
+        const name = typeof insight.name === "string" ? insight.name : "";
+        const insightTimeRange = typeof insight.time_range === "string" ? insight.time_range : "";
+        if (name !== metricName) {
+          continue;
+        }
+        if (timeRange && insightTimeRange !== timeRange) {
+          continue;
+        }
+
+        const totalValue = (insight.total_value as { value?: string | number; breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined) ?? undefined;
+        if (totalValue?.breakdowns?.dimension_key === dimensionKey) {
+          return totalValue;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 function extractTopCitiesFromResponses(responses: Array<Record<string, unknown>>): string[] {
-  const metric = readMetricByName(responses, "creator_engaged_accounts", "this_month");
+  const metric = readMetricByBreakdown(responses, "creator_engaged_accounts", "top_cities", "this_month");
   const breakdowns = metric?.breakdowns;
   if (!breakdowns?.dimensionKey || breakdowns.dimensionKey !== "top_cities" || !Array.isArray(breakdowns.results)) {
     return [];
@@ -290,7 +325,7 @@ function extractTopCitiesFromResponses(responses: Array<Record<string, unknown>>
   return breakdowns.results
     .map((result) => {
       if (typeof result.dimension_value === "string") {
-        return result.dimension_value;
+        return result.dimension_value.split(",")[0]?.trim() ?? result.dimension_value;
       }
       return null;
     })
@@ -302,8 +337,8 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
   const rawResponses = result.data?.rawApiResponses ?? [];
   const totalFollowersMetric = readMetricByName(rawResponses, "total_followers", "lifetime");
   const reelsInteractionMetric = readMetricByName(rawResponses, "reels_interaction_rate", "last_90_days");
-  const ageMetric = readMetricByName(rawResponses, "creator_engaged_accounts", "this_month");
-  const genderMetric = readMetricByName(rawResponses, "creator_engaged_accounts", "this_month");
+  const ageMetric = readMetricByBreakdown(rawResponses, "creator_engaged_accounts", "age", "this_month");
+  const genderMetric = readMetricByBreakdown(rawResponses, "creator_engaged_accounts", "gender", "this_month");
   const ageBreakdowns = ageMetric?.breakdowns;
   const genderBreakdowns = genderMetric?.breakdowns;
   const topCities = extractTopCitiesFromResponses(rawResponses);
