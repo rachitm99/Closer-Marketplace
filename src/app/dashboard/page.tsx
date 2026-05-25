@@ -50,15 +50,6 @@ type RawApiResponse = {
   payload?: Record<string, unknown>;
 };
 
-type MetricBreakdown = {
-  dimensionKey: string;
-  results: Array<{
-    dimensionValue: string;
-    value?: string | number;
-    percentage?: number;
-  }>;
-};
-
 function prettyLabel(value: string): string {
   return value
     .replace(/_/g, " ")
@@ -84,7 +75,11 @@ function formatMetricValue(value: unknown): string {
 
 function normalizeBreakdownResults(
   results: Array<Record<string, unknown>>,
-): MetricBreakdown["results"] {
+): Array<{
+  dimensionValue: string;
+  value?: string | number;
+  percentage?: number;
+}> {
   return results.map((result) => ({
     dimensionValue:
       typeof result.dimension_value === "string" ? result.dimension_value : "Unknown",
@@ -163,72 +158,6 @@ function extractInstagramUsernames(text: string): string[] {
   return Array.from(usernames);
 }
 
-function RawResponseCard({ result }: { result: LookupResult }) {
-  const payload = result.data ?? { error: result.error ?? "Unknown error" };
-  const rawJson = JSON.stringify(payload, null, 2);
-
-  return (
-    <article
-      style={{
-        border: "1px solid rgba(15,23,42,0.12)",
-        borderRadius: "14px",
-        padding: "0.95rem",
-        background: "#ffffff",
-        boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start" }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: "0.98rem" }}>
-            {result.requestedUsername ? `@${result.requestedUsername}` : result.requestedInput}
-          </h3>
-          <p style={{ margin: "0.25rem 0 0", fontSize: "0.78rem", color: "rgba(15,23,42,0.65)" }}>
-            {result.error ? "error" : "success"}
-          </p>
-        </div>
-        <span
-          style={{
-            padding: "0.25rem 0.55rem",
-            borderRadius: "999px",
-            background: result.error ? "rgba(239,68,68,0.12)" : "rgba(34,197,94,0.12)",
-            color: result.error ? "#b91c1c" : "#15803d",
-            fontSize: "0.75rem",
-            fontWeight: 700,
-          }}
-        >
-          {result.error ? "Error" : "Success"}
-        </span>
-      </div>
-
-      {result.error ? (
-        <p style={{ margin: "0.8rem 0 0", color: "#b91c1c", fontSize: "0.86rem" }}>{result.error}</p>
-      ) : null}
-
-      <details open style={{ marginTop: "0.85rem" }}>
-        <summary style={{ cursor: "pointer", fontSize: "0.82rem", color: "rgba(15,23,42,0.7)" }}>
-          View raw JSON response
-        </summary>
-        <pre
-          style={{
-            marginTop: "0.75rem",
-            padding: "0.9rem",
-            borderRadius: "12px",
-            background: "#0b1220",
-            color: "#dbe7ff",
-            overflowX: "auto",
-            fontSize: "0.78rem",
-            lineHeight: 1.5,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {rawJson}
-        </pre>
-      </details>
-    </article>
-  );
-}
-
 function CombinedRawJsonCard({ results }: { results: LookupResult[] }) {
   const combinedPayload = {
     generatedAt: new Date().toISOString(),
@@ -300,6 +229,218 @@ function CombinedRawJsonCard({ results }: { results: LookupResult[] }) {
         </pre>
       </details>
     </article>
+  );
+}
+
+type ParsedAccountRow = {
+  requestedUsername: string;
+  requestedInput: string;
+  error?: string | null;
+  totalFollowers: string;
+  reelsInteractionRate: string;
+  age18To24: string;
+  age25To34: string;
+  age35To44: string;
+  malePct: string;
+  femalePct: string;
+  topCity1: string;
+  topCity2: string;
+  topCity3: string;
+};
+
+function readMetricByName(
+  responses: Array<Record<string, unknown>>,
+  metricName: string,
+  timeRange?: string,
+): { value?: string | number; breakdowns?: { dimensionKey?: string; results?: Array<Record<string, unknown>> } } | null {
+  for (const response of responses as RawApiResponse[]) {
+    const data = response.payload?.data;
+    if (!Array.isArray(data)) {
+      continue;
+    }
+
+    for (const item of data) {
+      const insights = (item as { insights?: { data?: Array<Record<string, unknown>> } }).insights?.data ?? [];
+      for (const insight of insights) {
+        const name = typeof insight.name === "string" ? insight.name : "";
+        const insightTimeRange = typeof insight.time_range === "string" ? insight.time_range : "";
+        if (name !== metricName) {
+          continue;
+        }
+        if (timeRange && insightTimeRange !== timeRange) {
+          continue;
+        }
+
+        const totalValue = (insight.total_value as { value?: string | number; breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined) ?? undefined;
+        return totalValue ?? null;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractTopCitiesFromResponses(responses: Array<Record<string, unknown>>): string[] {
+  const metric = readMetricByName(responses, "creator_engaged_accounts", "this_month");
+  const breakdowns = metric?.breakdowns;
+  if (!breakdowns?.dimensionKey || breakdowns.dimensionKey !== "top_cities" || !Array.isArray(breakdowns.results)) {
+    return [];
+  }
+
+  return breakdowns.results
+    .map((result) => {
+      if (typeof result.dimension_value === "string") {
+        return result.dimension_value;
+      }
+      return null;
+    })
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 3);
+}
+
+function parseLookupResult(result: LookupResult): ParsedAccountRow {
+  const rawResponses = result.data?.rawApiResponses ?? [];
+  const totalFollowersMetric = readMetricByName(rawResponses, "total_followers", "lifetime");
+  const reelsInteractionMetric = readMetricByName(rawResponses, "reels_interaction_rate", "last_90_days");
+  const ageMetric = readMetricByName(rawResponses, "creator_engaged_accounts", "this_month");
+  const genderMetric = readMetricByName(rawResponses, "creator_engaged_accounts", "this_month");
+  const ageBreakdowns = ageMetric?.breakdowns;
+  const genderBreakdowns = genderMetric?.breakdowns;
+  const topCities = extractTopCitiesFromResponses(rawResponses);
+
+  const ageValue = (target: string) => {
+    const found = ageBreakdowns?.results?.find((entry) => typeof entry.dimension_value === "string" && entry.dimension_value === target);
+    const value = found?.percentage ?? found?.value;
+    return value !== undefined ? formatMetricValue(value) : "-";
+  };
+
+  const genderValue = (target: string) => {
+    const found = genderBreakdowns?.results?.find((entry) => typeof entry.dimension_value === "string" && entry.dimension_value.toLowerCase() === target);
+    const value = found?.percentage ?? found?.value;
+    return value !== undefined ? formatMetricValue(value) : "-";
+  };
+
+  return {
+    requestedUsername: result.requestedUsername,
+    requestedInput: result.requestedInput,
+    error: result.error ?? null,
+    totalFollowers: totalFollowersMetric?.value !== undefined ? formatMetricValue(totalFollowersMetric.value) : "-",
+    reelsInteractionRate: reelsInteractionMetric?.value !== undefined ? `${formatMetricValue(reelsInteractionMetric.value)}%` : "-",
+    age18To24: ageValue("18-24"),
+    age25To34: ageValue("25-34"),
+    age35To44: ageValue("35-44"),
+    malePct: genderValue("male"),
+    femalePct: genderValue("female"),
+    topCity1: topCities[0] ?? "-",
+    topCity2: topCities[1] ?? "-",
+    topCity3: topCities[2] ?? "-",
+  };
+}
+
+function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
+  const rows = results.map((result) => parseLookupResult(result));
+
+  const columns = [
+    { label: "Username", key: "requestedUsername" },
+    { label: "Total follower", key: "totalFollowers" },
+    { label: "Reels interaction rate", key: "reelsInteractionRate" },
+    { label: "Age 18 - 24", key: "age18To24" },
+    { label: "Age 25 - 34", key: "age25To34" },
+    { label: "Age 35 - 44", key: "age35To44" },
+    { label: "Male %", key: "malePct" },
+    { label: "Female %", key: "femalePct" },
+    { label: "Top city 1", key: "topCity1" },
+    { label: "Top city 2", key: "topCity2" },
+    { label: "Top city 3", key: "topCity3" },
+  ] as const;
+
+  return (
+    <section
+      style={{
+        borderRadius: "18px",
+        border: "1px solid rgba(15,23,42,0.1)",
+        background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+        boxShadow: "0 14px 36px rgba(15,23,42,0.08)",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ padding: "1rem 1rem 0.7rem", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <div>
+            <p style={{ margin: 0, fontSize: "0.76rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(15,23,42,0.55)" }}>
+              Parsed view
+            </p>
+            <h3 style={{ margin: "0.35rem 0 0", fontSize: "1.05rem" }}>
+              Requested columns extracted from raw API responses
+            </h3>
+          </div>
+          <div style={{ fontSize: "0.84rem", color: "rgba(15,23,42,0.68)", alignSelf: "end" }}>
+            Values are parsed from the API response collection below
+          </div>
+        </div>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            minWidth: "1600px",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+          }}
+        >
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th
+                  key={column.key}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 1,
+                    textAlign: "left",
+                    padding: "0.95rem 1rem",
+                    background: "#edf5ff",
+                    borderBottom: "1px solid rgba(15,23,42,0.1)",
+                    borderRight: "1px solid rgba(15,23,42,0.08)",
+                    verticalAlign: "bottom",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#10243e" }}>{column.label}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`${row.requestedUsername}-${rowIndex}`}>
+                {columns.map((column, columnIndex) => {
+                  const value = row[column.key];
+                  return (
+                    <td
+                      key={`${row.requestedUsername}-${rowIndex}-${column.key}`}
+                      style={{
+                        padding: "1rem",
+                        borderBottom: "1px solid rgba(15,23,42,0.08)",
+                        borderRight: "1px solid rgba(15,23,42,0.06)",
+                        background: rowIndex % 2 === 0 ? "#ffffff" : "#f9fcff",
+                        fontSize: columnIndex === 0 ? "0.95rem" : "0.98rem",
+                        fontWeight: columnIndex === 0 ? 800 : 700,
+                        color: columnIndex === 0 && row.error ? "#b91c1c" : "#0f172a",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {String(value ?? "-")}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -740,22 +881,20 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div style={{ marginBottom: "1.25rem", display: "grid", gap: "0.85rem" }}>
-              <CombinedRawJsonCard results={batchResults} />
+            <div style={{ marginBottom: "1.25rem" }}>
+              <ParsedFieldsTable results={batchResults} />
             </div>
             {showRaw ? (
               <section style={{ marginTop: "1.25rem" }}>
-                <h3 style={{ marginBottom: "0.75rem" }}>API Calls</h3>
+                <h3 style={{ marginBottom: "0.75rem" }}>Raw JSON collection</h3>
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                    gridTemplateColumns: "1fr",
                     gap: "0.85rem",
                   }}
                 >
-                  {batchResults.flatMap((item) => item.data?.rawApiResponses ?? []).map((response, index) => (
-                    <ApiCallCard key={`${(response as RawApiResponse).type}-${index}`} response={response as RawApiResponse} />
-                  ))}
+                  <CombinedRawJsonCard results={batchResults} />
                 </div>
               </section>
             ) : null}
