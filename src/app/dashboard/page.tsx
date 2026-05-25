@@ -33,7 +33,6 @@ type CreatorMarketplaceResultDebug = CreatorMarketplaceResult & {
   discoveredCreatorUsername?: string;
   insightsLookupMethod?: string;
   insightsLookupExplanation?: string;
-  analyticsSnapshot?: Record<string, unknown>;
 };
 
 type LookupResult = {
