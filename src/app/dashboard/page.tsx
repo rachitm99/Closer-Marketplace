@@ -15,6 +15,17 @@ type CreatorMarketplaceResult = {
 };
 // (added) optional debug fields returned by the API
 type CreatorMarketplaceResultDebug = CreatorMarketplaceResult & {
+  analyticsSnapshot?: {
+    interactionRatePct?: string;
+    malePct?: string;
+    femalePct?: string;
+    age18To24Pct?: string;
+    age25To34Pct?: string;
+    age35To44Pct?: string;
+    topCities?: string[];
+  };
+  topLevel?: Array<Record<string, unknown>>;
+  creatorInsights?: Array<Record<string, unknown>>;
   rawApiResponses?: Array<Record<string, unknown>>;
   rawCapturePath?: string;
   request?: Record<string, unknown>;
@@ -23,6 +34,13 @@ type CreatorMarketplaceResultDebug = CreatorMarketplaceResult & {
   insightsLookupMethod?: string;
   insightsLookupExplanation?: string;
   analyticsSnapshot?: Record<string, unknown>;
+};
+
+type LookupResult = {
+  requestedInput: string;
+  requestedUsername: string;
+  data?: CreatorMarketplaceResultDebug;
+  error?: string;
 };
 
 type RawApiResponse = {
@@ -40,14 +58,6 @@ type MetricBreakdown = {
     value?: string | number;
     percentage?: number;
   }>;
-};
-
-type MetricEntry = {
-  name: string;
-  timeRange: string;
-  period?: string;
-  value?: string | number;
-  breakdowns: MetricBreakdown[];
 };
 
 function prettyLabel(value: string): string {
@@ -87,125 +97,309 @@ function normalizeBreakdownResults(
   }));
 }
 
-function extractMetricsFromResponses(rawApiResponses?: Array<Record<string, unknown>>): MetricEntry[] {
-  const metrics: MetricEntry[] = [];
+const INSTAGRAM_RESERVED_PATHS = new Set([
+  "p",
+  "reel",
+  "reels",
+  "tv",
+  "stories",
+  "explore",
+  "accounts",
+  "about",
+  "developer",
+  "directory",
+  "api",
+  "oauth",
+]);
 
-  for (const response of (rawApiResponses ?? []) as RawApiResponse[]) {
-    const data = response.payload?.data;
-    if (!Array.isArray(data)) {
+function normalizeInstagramUsername(value: string): string {
+  return value
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/[/?#].*$/, "")
+    .replace(/[.]+$/, "");
+}
+
+function extractInstagramUsernames(text: string): string[] {
+  const usernames = new Set<string>();
+  const tokens = text.split(/[\s,;]+/).map((part) => part.trim()).filter(Boolean);
+
+  for (const token of tokens) {
+    const cleanedToken = token.replace(/[()[\]{}<>"']/g, "");
+    let candidate: string | null = null;
+
+    if (cleanedToken.toLowerCase().includes("instagram.com")) {
+      try {
+        const parsed = new URL(cleanedToken.startsWith("http") ? cleanedToken : `https://${cleanedToken}`);
+        const firstSegment = parsed.pathname.split("/").filter(Boolean)[0];
+        if (firstSegment && !INSTAGRAM_RESERVED_PATHS.has(firstSegment.toLowerCase())) {
+          candidate = firstSegment;
+        }
+      } catch {
+        const match = cleanedToken.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
+        const firstSegment = match?.[1];
+        if (firstSegment && !INSTAGRAM_RESERVED_PATHS.has(firstSegment.toLowerCase())) {
+          candidate = firstSegment;
+        }
+      }
+    }
+
+    if (!candidate) {
+      const handleMatch = cleanedToken.match(/^@?([A-Za-z0-9._]{1,30})$/);
+      if (handleMatch) {
+        candidate = handleMatch[1];
+      }
+    }
+
+    if (!candidate) {
       continue;
     }
 
-    const first = data[0] as Record<string, unknown> | undefined;
-    const insightItems = (first?.insights as { data?: Array<Record<string, unknown>> } | undefined)?.data ?? [];
-
-    for (const item of insightItems) {
-      const name = typeof item.name === "string" ? item.name : "Metric";
-      const timeRange = typeof item.time_range === "string" ? item.time_range : "overall";
-      const period = typeof item.period === "string" ? item.period : undefined;
-      const totalValue = item.total_value as { value?: string | number; breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined;
-      const breakdowns: MetricBreakdown[] = [];
-
-      const rawBreakdowns = totalValue?.breakdowns;
-      if (rawBreakdowns?.dimension_key && Array.isArray(rawBreakdowns.results)) {
-        breakdowns.push({
-          dimensionKey: rawBreakdowns.dimension_key,
-          results: normalizeBreakdownResults(rawBreakdowns.results),
-        });
-      }
-
-      metrics.push({
-        name,
-        timeRange,
-        period,
-        value:
-          typeof totalValue?.value === "number" || typeof totalValue?.value === "string"
-            ? totalValue.value
-            : undefined,
-        breakdowns,
-      });
+    const normalized = normalizeInstagramUsername(candidate);
+    if (normalized && !INSTAGRAM_RESERVED_PATHS.has(normalized.toLowerCase())) {
+      usernames.add(normalized);
     }
   }
 
-  return metrics;
+  return Array.from(usernames);
 }
 
-function MetricCard({ metric }: { metric: MetricEntry }) {
+function SelectedFieldsTable({
+  creator,
+  snapshot,
+}: {
+  creator?: CreatorMarketplaceResult["creators"][number];
+  snapshot?: CreatorMarketplaceResultDebug["analyticsSnapshot"];
+}) {
+  const totalFollowers = formatMetricValue(
+    creator?.insights?.total_followers ?? creator?.insights?.followers_count,
+  );
+  const topCities = snapshot?.topCities ?? [];
+
+  const columns = [
+    { label: "Total follower", subLabel: "Lifetime overall", value: totalFollowers },
+    { label: "Reels interaction rate", subLabel: "Last 90 days", value: snapshot?.interactionRatePct ?? "-" },
+    { label: "Age 18 - 24", subLabel: "Audience split", value: snapshot?.age18To24Pct ?? "-" },
+    { label: "Age 25 - 34", subLabel: "Audience split", value: snapshot?.age25To34Pct ?? "-" },
+    { label: "Age 35 - 44", subLabel: "Audience split", value: snapshot?.age35To44Pct ?? "-" },
+    { label: "Male %", subLabel: "Audience split", value: snapshot?.malePct ?? "-" },
+    { label: "Female %", subLabel: "Audience split", value: snapshot?.femalePct ?? "-" },
+    { label: "Top city 1", subLabel: "Top locations", value: topCities[0] ?? "-" },
+    { label: "Top city 2", subLabel: "Top locations", value: topCities[1] ?? "-" },
+    { label: "Top city 3", subLabel: "Top locations", value: topCities[2] ?? "-" },
+  ];
+
   return (
-    <article
+    <section
       style={{
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: "16px",
-        padding: "1rem",
-        background: "linear-gradient(180deg, rgba(17,24,39,0.92), rgba(15,23,42,0.92))",
-        color: "#e6eef8",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+        borderRadius: "18px",
+        border: "1px solid rgba(15,23,42,0.1)",
+        background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+        boxShadow: "0 14px 36px rgba(15,23,42,0.08)",
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "start" }}>
-        <div>
-          <p style={{ margin: 0, fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.12em", opacity: 0.7 }}>
-            {prettyLabel(metric.name)}
-          </p>
-          <h3 style={{ margin: "0.3rem 0 0", fontSize: "1.35rem" }}>{formatMetricValue(metric.value)}</h3>
-        </div>
-        <div style={{ textAlign: "right", fontSize: "0.78rem", opacity: 0.8 }}>
-          <div>{prettyLabel(metric.timeRange)}</div>
-          {metric.period ? <div>{prettyLabel(metric.period)}</div> : null}
+      <div style={{ padding: "1rem 1rem 0.7rem", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <div>
+            <p style={{ margin: 0, fontSize: "0.76rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(15,23,42,0.55)" }}>
+              Excel view
+            </p>
+            <h3 style={{ margin: "0.35rem 0 0", fontSize: "1.05rem" }}>
+              Selected fields for {creator?.username ? `@${creator.username}` : "the loaded creator"}
+            </h3>
+          </div>
+          <div style={{ fontSize: "0.84rem", color: "rgba(15,23,42,0.68)", alignSelf: "end" }}>
+            Showing only the requested columns
+          </div>
         </div>
       </div>
 
-      {metric.breakdowns.length ? (
-        <div style={{ marginTop: "0.95rem", display: "grid", gap: "0.75rem" }}>
-          {metric.breakdowns.map((breakdown) => (
-            <section
-              key={`${metric.name}-${metric.timeRange}-${breakdown.dimensionKey}`}
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                borderRadius: "12px",
-                padding: "0.85rem",
-                border: "1px solid rgba(255,255,255,0.06)",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.65rem" }}>
-                <strong style={{ fontSize: "0.9rem" }}>{prettyLabel(breakdown.dimensionKey)}</strong>
-                <span style={{ fontSize: "0.78rem", opacity: 0.75 }}>Breakdown</span>
-              </div>
-              <div style={{ display: "grid", gap: "0.5rem" }}>
-                {breakdown.results.map((result) => (
-                  <div
-                    key={`${result.dimensionValue}-${metric.name}-${breakdown.dimensionKey}`}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr auto",
-                      gap: "0.75rem",
-                      alignItems: "center",
-                      padding: "0.65rem 0.8rem",
-                      borderRadius: "10px",
-                      background: "rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{result.dimensionValue}</div>
-                      <div style={{ fontSize: "0.78rem", opacity: 0.72 }}>
-                        {result.value !== undefined ? `Value: ${formatMetricValue(result.value)}` : ""}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: "1rem", fontWeight: 700 }}>
-                      {result.percentage !== undefined
-                        ? `${result.percentage.toFixed(1)}%`
-                        : result.value !== undefined
-                          ? formatMetricValue(result.value)
-                          : "-"}
-                    </div>
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            minWidth: "1200px",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+          }}
+        >
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th
+                  key={column.label}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 1,
+                    textAlign: "left",
+                    padding: "0.95rem 1rem",
+                    background: "#edf5ff",
+                    borderBottom: "1px solid rgba(15,23,42,0.1)",
+                    borderRight: "1px solid rgba(15,23,42,0.08)",
+                    verticalAlign: "bottom",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#10243e" }}>{column.label}</div>
+                  <div style={{ marginTop: "0.2rem", fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(16,36,62,0.55)" }}>
+                    {column.subLabel}
                   </div>
-                ))}
-              </div>
-            </section>
-          ))}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {columns.map((column, index) => (
+                <td
+                  key={`${column.label}-${index}`}
+                  style={{
+                    padding: "1rem",
+                    borderBottom: "1px solid rgba(15,23,42,0.08)",
+                    borderRight: "1px solid rgba(15,23,42,0.06)",
+                    background: index % 2 === 0 ? "#ffffff" : "#f9fcff",
+                    fontSize: "0.98rem",
+                    fontWeight: 700,
+                    color: "#0f172a",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {column.value}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function SelectedFieldsBatchTable({ results }: { results: LookupResult[] }) {
+  const columns = [
+    { label: "Username", subLabel: "Instagram account" },
+    { label: "Total follower", subLabel: "Lifetime overall" },
+    { label: "Reels interaction rate", subLabel: "Last 90 days" },
+    { label: "Age 18 - 24", subLabel: "Audience split" },
+    { label: "Age 25 - 34", subLabel: "Audience split" },
+    { label: "Age 35 - 44", subLabel: "Audience split" },
+    { label: "Male %", subLabel: "Audience split" },
+    { label: "Female %", subLabel: "Audience split" },
+    { label: "Top city 1", subLabel: "Top locations" },
+    { label: "Top city 2", subLabel: "Top locations" },
+    { label: "Top city 3", subLabel: "Top locations" },
+  ];
+
+  return (
+    <section
+      style={{
+        borderRadius: "18px",
+        border: "1px solid rgba(15,23,42,0.1)",
+        background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+        boxShadow: "0 14px 36px rgba(15,23,42,0.08)",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ padding: "1rem 1rem 0.7rem", borderBottom: "1px solid rgba(15,23,42,0.08)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <div>
+            <p style={{ margin: 0, fontSize: "0.76rem", textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(15,23,42,0.55)" }}>
+              Excel view
+            </p>
+            <h3 style={{ margin: "0.35rem 0 0", fontSize: "1.05rem" }}>
+              Selected fields for {results.length} account{results.length === 1 ? "" : "s"}
+            </h3>
+          </div>
+          <div style={{ fontSize: "0.84rem", color: "rgba(15,23,42,0.68)", alignSelf: "end" }}>
+            Showing only the requested columns
+          </div>
         </div>
-      ) : null}
-    </article>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table
+          style={{
+            width: "100%",
+            minWidth: "1500px",
+            borderCollapse: "separate",
+            borderSpacing: 0,
+          }}
+        >
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th
+                  key={column.label}
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 1,
+                    textAlign: "left",
+                    padding: "0.95rem 1rem",
+                    background: "#edf5ff",
+                    borderBottom: "1px solid rgba(15,23,42,0.1)",
+                    borderRight: "1px solid rgba(15,23,42,0.08)",
+                    verticalAlign: "bottom",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#10243e" }}>{column.label}</div>
+                  <div style={{ marginTop: "0.2rem", fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(16,36,62,0.55)" }}>
+                    {column.subLabel}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((result, rowIndex) => {
+              const data = result.data;
+              const snapshot = data?.analyticsSnapshot;
+              const creator = data?.creators?.[0];
+              const topCities = snapshot?.topCities ?? [];
+
+              const cells = [
+                result.requestedUsername ? `@${result.requestedUsername}` : result.requestedInput,
+                formatMetricValue(creator?.insights?.total_followers ?? creator?.insights?.followers_count),
+                snapshot?.interactionRatePct ?? (result.error ? "-" : "-"),
+                snapshot?.age18To24Pct ?? "-",
+                snapshot?.age25To34Pct ?? "-",
+                snapshot?.age35To44Pct ?? "-",
+                snapshot?.malePct ?? "-",
+                snapshot?.femalePct ?? "-",
+                topCities[0] ?? "-",
+                topCities[1] ?? "-",
+                topCities[2] ?? "-",
+              ];
+
+              return (
+                <tr key={`${result.requestedUsername}-${rowIndex}`}>
+                  {cells.map((cell, cellIndex) => (
+                    <td
+                      key={`${result.requestedUsername}-${rowIndex}-${cellIndex}`}
+                      style={{
+                        padding: "1rem",
+                        borderBottom: "1px solid rgba(15,23,42,0.08)",
+                        borderRight: "1px solid rgba(15,23,42,0.06)",
+                        background: rowIndex % 2 === 0 ? "#ffffff" : "#f9fcff",
+                        fontSize: cellIndex === 0 ? "0.95rem" : "0.98rem",
+                        fontWeight: cellIndex === 0 ? 800 : 700,
+                        color: cellIndex === 0 && result.error ? "#b91c1c" : "#0f172a",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -342,11 +536,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [marketplaceData, setMarketplaceData] = useState<CreatorMarketplaceResultDebug | null>(null);
+  const [batchResults, setBatchResults] = useState<LookupResult[]>([]);
   const [showRaw, setShowRaw] = useState(false);
   const [session, setSession] = useState<SessionState>({ authenticated: false });
-  const metrics = useMemo(() => extractMetricsFromResponses(marketplaceData?.rawApiResponses), [marketplaceData]);
-  const creatorDetails = marketplaceData?.rawApiResponses?.find((response) => (response as RawApiResponse).type === "insights_by_username_requested") as RawApiResponse | undefined;
+  const parsedUsernames = useMemo(() => extractInstagramUsernames(usernameInput), [usernameInput]);
 
   const username = useMemo(() => usernameInput.replace(/@/g, "").trim(), [usernameInput]);
 
@@ -387,7 +580,7 @@ export default function DashboardPage() {
   async function onLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setSession({ authenticated: false });
-    setMarketplaceData(null);
+    setBatchResults([]);
     setError(null);
     router.replace("/login");
   }
@@ -400,39 +593,59 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!username) {
-      setError("Please enter an Instagram username.");
+    if (!parsedUsernames.length) {
+      setError("Please enter one or more Instagram usernames or profile URLs.");
       return;
     }
 
     setLoading(true);
     setError(null);
-    setMarketplaceData(null);
+    setBatchResults([]);
 
     try {
       const queryValue = queryInput.trim();
-      const params = new URLSearchParams({
-        username,
-        include_insights: "true",
-        include_media: "false",
-        limit: "10",
-      });
+      const lookupResults = await Promise.all(
+        parsedUsernames.map(async (parsedUsername) => {
+          const params = new URLSearchParams({
+            username: parsedUsername,
+            include_insights: "true",
+            include_media: "false",
+            limit: "1",
+          });
 
-      if (queryValue) {
-        params.set("query", queryValue);
+          if (queryValue) {
+            params.set("query", queryValue);
+          }
+
+          const endpoint = `/api/creator-marketplace?${params.toString()}`;
+
+          const response = await fetch(endpoint);
+          const payload = (await response.json()) as CreatorMarketplaceResultDebug | { error: string };
+
+          if (!response.ok || "error" in payload) {
+            return {
+              requestedInput: parsedUsername,
+              requestedUsername: parsedUsername,
+              error: "error" in payload ? payload.error : "Unable to load creators.",
+            } satisfies LookupResult;
+          }
+
+          return {
+            requestedInput: parsedUsername,
+            requestedUsername: (payload as CreatorMarketplaceResultDebug).discoveredCreatorUsername || parsedUsername,
+            data: payload as CreatorMarketplaceResultDebug,
+          } satisfies LookupResult;
+        }),
+      );
+
+      setBatchResults(lookupResults);
+
+      const failures = lookupResults.filter((item) => item.error);
+      if (failures.length && failures.length === lookupResults.length) {
+        setError(failures[0]?.error ?? "Unable to load creators.");
+      } else if (failures.length) {
+        setError(`Loaded ${lookupResults.length - failures.length} of ${lookupResults.length} accounts. Some lookups failed.`);
       }
-
-      const endpoint = `/api/creator-marketplace?${params.toString()}`;
-
-      const response = await fetch(endpoint);
-      const payload = (await response.json()) as CreatorMarketplaceResult | { error: string };
-
-      if (!response.ok || "error" in payload) {
-        setError("error" in payload ? payload.error : "Unable to load creators.");
-        return;
-      }
-
-      setMarketplaceData(payload as CreatorMarketplaceResult);
     } catch {
       setError("Could not reach the API route. Check local server logs.");
     } finally {
@@ -441,26 +654,43 @@ export default function DashboardPage() {
   }
 
   function onExportCsv() {
-    if (!marketplaceData?.creators?.length) {
+    if (!batchResults.length) {
       return;
     }
 
-    const insightKeys = Array.from(
-      new Set(marketplaceData.creators.flatMap((creator) => Object.keys(creator.insights ?? {}))),
-    );
+    const headers = [
+      "username",
+      "total_follower",
+      "reels_interaction_rate",
+      "age_18_24",
+      "age_25_34",
+      "age_35_44",
+      "male_pct",
+      "female_pct",
+      "top_city_1",
+      "top_city_2",
+      "top_city_3",
+    ];
 
-    const headers = ["id", "username", "country", "gender", "isMock", ...insightKeys];
-    const rows = marketplaceData.creators.map((creator) => {
-      const base = [
-        creator.id,
-        creator.username,
-        creator.country,
-        creator.gender,
-        String(creator.isMock),
+    const rows = batchResults.map((result) => {
+      const data = result.data;
+      const creator = data?.creators?.[0];
+      const snapshot = data?.analyticsSnapshot;
+      const topCities = snapshot?.topCities ?? [];
+
+      return [
+        result.requestedUsername || result.requestedInput,
+        String(creator?.insights?.total_followers ?? creator?.insights?.followers_count ?? ""),
+        String(snapshot?.interactionRatePct ?? ""),
+        String(snapshot?.age18To24Pct ?? ""),
+        String(snapshot?.age25To34Pct ?? ""),
+        String(snapshot?.age35To44Pct ?? ""),
+        String(snapshot?.malePct ?? ""),
+        String(snapshot?.femalePct ?? ""),
+        String(topCities[0] ?? ""),
+        String(topCities[1] ?? ""),
+        String(topCities[2] ?? ""),
       ];
-
-      const insightValues = insightKeys.map((key) => String(creator.insights?.[key] ?? ""));
-      return [...base, ...insightValues];
     });
 
     const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
@@ -517,13 +747,13 @@ export default function DashboardPage() {
         <section className="query-card">
           <form onSubmit={onSubmit} className="query-form">
             <label htmlFor="username" className="field-label">
-              Instagram Username
+              Instagram usernames or profile URLs
             </label>
             <textarea
               id="username"
               value={usernameInput}
               onChange={(event) => setUsernameInput(event.target.value)}
-              placeholder="example: dr_nishaa"
+              placeholder="Paste usernames, @handles, or Instagram profile URLs here. You can add multiple entries on separate lines."
               rows={4}
               className="username-box"
             />
@@ -547,7 +777,15 @@ export default function DashboardPage() {
 
         {error ? <p className="error-box">{error}</p> : null}
 
-        {marketplaceData ? (
+        {parsedUsernames.length ? (
+          <section className="query-card" style={{ marginTop: "-0.35rem" }}>
+            <p style={{ margin: 0, color: "rgba(15,23,42,0.72)" }}>
+              Parsed {parsedUsernames.length} account{parsedUsernames.length === 1 ? "" : "s"}: {parsedUsernames.map((item) => `@${item}`).join(", ")}
+            </p>
+          </section>
+        ) : null}
+
+        {batchResults.length ? (
           <section className="panel">
             <div
               style={{
@@ -583,118 +821,27 @@ export default function DashboardPage() {
               }}
             >
               <div style={{ padding: "1rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Username</div>
-                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>@{marketplaceData.discoveredCreatorUsername || username || "-"}</div>
+                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Accounts</div>
+                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>{batchResults.length}</div>
               </div>
               <div style={{ padding: "1rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Creator ID</div>
-                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>{marketplaceData.discoveredCreatorId || "-"}</div>
+                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Success</div>
+                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>{batchResults.filter((item) => !item.error).length}</div>
               </div>
               <div style={{ padding: "1rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Country</div>
-                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>{marketplaceData.creators?.[0]?.country || "-"}</div>
+                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Errors</div>
+                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>{batchResults.filter((item) => item.error).length}</div>
               </div>
               <div style={{ padding: "1rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Gender</div>
-                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>{marketplaceData.creators?.[0]?.gender || "-"}</div>
-              </div>
-              <div style={{ padding: "1rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Insight Calls</div>
-                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>{metrics.length}</div>
-              </div>
-            </div>
-
-            {marketplaceData.insightsLookupExplanation ? (
-              <p style={{ margin: "0 0 1rem", color: "rgba(15,23,42,0.7)" }}>{marketplaceData.insightsLookupExplanation}</p>
-            ) : null}
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "0.85rem",
-                marginBottom: "1rem",
-              }}
-            >
-              <div style={{ padding: "0.95rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Request</div>
-                <div style={{ marginTop: "0.3rem", fontWeight: 700 }}>{marketplaceData.request?.username ? `@${String(marketplaceData.request.username)}` : "-"}</div>
-                <div style={{ marginTop: "0.2rem", fontSize: "0.82rem", opacity: 0.7 }}>
-                  Query: {String(marketplaceData.request?.query ?? "") || "(empty)"}
-                </div>
-              </div>
-              <div style={{ padding: "0.95rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Limit</div>
-                <div style={{ marginTop: "0.3rem", fontWeight: 700 }}>{String(marketplaceData.request?.limit ?? "-")}</div>
-                <div style={{ marginTop: "0.2rem", fontSize: "0.82rem", opacity: 0.7 }}>
-                  Include insights: {marketplaceData.request?.includeInsights ? "yes" : "no"}
-                </div>
-              </div>
-              <div style={{ padding: "0.95rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Capture</div>
-                <div style={{ marginTop: "0.3rem", fontWeight: 700, wordBreak: "break-word" }}>{marketplaceData.rawCapturePath ?? "(none)"}</div>
-              </div>
-              <div style={{ padding: "0.95rem", borderRadius: "14px", background: "#fff", border: "1px solid rgba(15,23,42,0.08)" }}>
-                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>Lookup</div>
-                <div style={{ marginTop: "0.3rem", fontWeight: 700 }}>{marketplaceData.insightsLookupMethod ?? "-"}</div>
-                <div style={{ marginTop: "0.2rem", fontSize: "0.82rem", opacity: 0.7 }}>
-                  {marketplaceData.rawApiResponses?.length ?? 0} API calls
+                <div style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.08em", opacity: 0.7 }}>API Calls</div>
+                <div style={{ marginTop: "0.25rem", fontSize: "1.1rem", fontWeight: 700 }}>
+                  {batchResults.reduce((total, item) => total + (item.data?.rawApiResponses?.length ?? 0), 0)}
                 </div>
               </div>
             </div>
 
             <div style={{ marginBottom: "1.25rem" }}>
-              <h3 style={{ margin: "0 0 0.75rem" }}>Metrics Overview</h3>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                  gap: "0.85rem",
-                }}
-              >
-                {metrics.map((metric, index) => (
-                  <MetricCard key={`${metric.name}-${metric.timeRange}-${index}`} metric={metric} />
-                ))}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "0.9rem",
-              }}
-            >
-              {marketplaceData.creators.map((creator) => (
-                <article
-                  key={`${creator.id}-${creator.username}`}
-                  style={{
-                    border: "1px solid rgba(0,0,0,0.08)",
-                    borderRadius: "12px",
-                    padding: "0.9rem",
-                    background: "#fff",
-                  }}
-                >
-                  <h3 style={{ margin: 0, fontSize: "1rem" }}>@{creator.username || "unknown"}</h3>
-                  <p style={{ margin: "0.35rem 0", fontSize: "0.85rem", opacity: 0.8 }}>
-                    ID: {creator.id || "-"}
-                  </p>
-                  <p style={{ margin: "0.35rem 0", fontSize: "0.85rem" }}>
-                    {creator.country || "-"} · {creator.gender || "-"}
-                  </p>
-                  {creator.isMock ? (
-                    <p style={{ margin: "0.35rem 0", fontSize: "0.8rem", color: "#8a5a00" }}>
-                      Mock profile
-                    </p>
-                  ) : null}
-                  <p style={{ margin: "0.45rem 0 0", fontSize: "0.8rem", opacity: 0.8 }}>
-                    Reach: {String(creator.insights.creator_reach ?? "-")}
-                  </p>
-                  <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", opacity: 0.8 }}>
-                    Followers: {String(creator.insights.total_followers ?? "-")}
-                  </p>
-                </article>
-              ))}
+              <SelectedFieldsBatchTable results={batchResults} />
             </div>
             {showRaw ? (
               <section style={{ marginTop: "1.25rem" }}>
@@ -706,7 +853,7 @@ export default function DashboardPage() {
                     gap: "0.85rem",
                   }}
                 >
-                  {(marketplaceData.rawApiResponses ?? []).map((response, index) => (
+                  {batchResults.flatMap((item) => item.data?.rawApiResponses ?? []).map((response, index) => (
                     <ApiCallCard key={`${(response as RawApiResponse).type}-${index}`} response={response as RawApiResponse} />
                   ))}
                 </div>
