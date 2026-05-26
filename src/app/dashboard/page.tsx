@@ -59,12 +59,39 @@ function prettyLabel(value: string): string {
     .trim();
 }
 
+function formatCompactNumber(value: number): string {
+  const absoluteValue = Math.abs(value);
+  const units = [
+    { threshold: 1_000_000_000_000, suffix: "T" },
+    { threshold: 1_000_000_000, suffix: "B" },
+    { threshold: 1_000_000, suffix: "M" },
+    { threshold: 1_000, suffix: "k" },
+  ];
+
+  for (const unit of units) {
+    if (absoluteValue >= unit.threshold) {
+      const scaledValue = value / unit.threshold;
+      const formattedValue = scaledValue.toLocaleString(undefined, { maximumFractionDigits: 1 });
+      return `${formattedValue}${unit.suffix}`;
+    }
+  }
+
+  return Number.isInteger(value)
+    ? value.toLocaleString()
+    : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
 function formatMetricValue(value: unknown): string {
   if (typeof value === "number") {
-    return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return formatCompactNumber(value);
   }
 
   if (typeof value === "string") {
+    const parsedValue = Number(value);
+    if (!Number.isNaN(parsedValue) && value.trim() !== "") {
+      return formatCompactNumber(parsedValue);
+    }
+
     return value;
   }
 
