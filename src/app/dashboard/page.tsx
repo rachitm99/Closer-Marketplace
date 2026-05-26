@@ -4,122 +4,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Spreadsheet, { type CellBase, type Matrix } from "react-spreadsheet";
 
-type CreatorMarketplaceResult = {
-  creators: Array<{
-    id: string;
-    username: string;
-    country: string;
-    gender: string;
-    isMock: boolean;
-    insights: Record<string, string | number>;
-  }>;
-};
-// (added) optional debug fields returned by the API
-type CreatorMarketplaceResultDebug = CreatorMarketplaceResult & {
-  analyticsSnapshot?: {
-    interactionRatePct?: string;
-    malePct?: string;
-    femalePct?: string;
-    age18To24Pct?: string;
-    age25To34Pct?: string;
-    age35To44Pct?: string;
-    topCities?: string[];
-  };
-  topLevel?: Array<Record<string, unknown>>;
-  creatorInsights?: Array<Record<string, unknown>>;
-  rawApiResponses?: Array<Record<string, unknown>>;
-  rawCapturePath?: string;
-  request?: Record<string, unknown>;
-  discoveredCreatorId?: string;
-  discoveredCreatorUsername?: string;
-  insightsLookupMethod?: string;
-  insightsLookupExplanation?: string;
-};
-
-type LookupResult = {
-  requestedInput: string;
-  requestedUsername: string;
-  data?: CreatorMarketplaceResultDebug;
-  error?: string;
-  loading?: boolean;
-};
-
-type RawApiResponse = {
-  type: string;
-  url?: string;
-  status?: number;
-  ok?: boolean;
-  payload?: Record<string, unknown>;
-};
-
-function prettyLabel(value: string): string {
-  return value
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase())
-    .trim();
-}
-
-function formatCompactNumber(value: number): string {
-  const absoluteValue = Math.abs(value);
-  const units = [
-    { threshold: 1_000_000_000_000, suffix: "T" },
-    { threshold: 1_000_000_000, suffix: "B" },
-    { threshold: 1_000_000, suffix: "M" },
-    { threshold: 1_000, suffix: "k" },
-  ];
-
-  for (const unit of units) {
-    if (absoluteValue >= unit.threshold) {
-      const scaledValue = value / unit.threshold;
-      const formattedValue = scaledValue.toLocaleString(undefined, { maximumFractionDigits: 1 });
-      return `${formattedValue}${unit.suffix}`;
-    }
-  }
-
-  return Number.isInteger(value)
-    ? value.toLocaleString()
-    : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-function formatMetricValue(value: unknown): string {
-  if (typeof value === "number") {
-    return formatCompactNumber(value);
-  }
-
-  if (typeof value === "string") {
-    const parsedValue = Number(value);
-    if (!Number.isNaN(parsedValue) && value.trim() !== "") {
-      return formatCompactNumber(parsedValue);
-    }
-
-    return value;
-  }
-
-  if (value === null || value === undefined) {
-    return "-";
-  }
-
-  return JSON.stringify(value);
-}
-
-function normalizeBreakdownResults(
-  results: Array<Record<string, unknown>>,
-): Array<{
-  dimensionValue: string;
-  value?: string | number;
-  percentage?: number;
-}> {
-  return results.map((result) => ({
-    dimensionValue:
-      typeof result.dimension_value === "string" ? result.dimension_value : "Unknown",
-    value:
-      typeof result.value === "number" || typeof result.value === "string"
-        ? result.value
-        : undefined,
-    percentage: typeof result.percentage === "number" ? result.percentage : undefined,
-  }));
-}
-
 const INSTAGRAM_RESERVED_PATHS = new Set([
   "p",
   "reel",
@@ -135,10 +19,153 @@ const INSTAGRAM_RESERVED_PATHS = new Set([
   "oauth",
 ]);
 
+type CreatorMarketplaceResult = {
+  creators: Array<{
+    id: string;
+    username: string;
+    country: string;
+    gender: string;
+    isMock: boolean;
+    insights: Record<string, string | number>;
+  }>;
+};
+
+type LookupResult = {
+  requestedInput: string;
+  requestedUsername: string;
+  loading?: boolean;
+  error?: string | null;
+  data?: any;
+};
+
+type RawApiResponse = Record<string, any>;
+
+type CreatorMarketplaceResultDebug = {
+  discoveredCreatorUsername?: string;
+  discoveredCreatorId?: string;
+  insights?: any;
+  creators?: any;
+  [key: string]: any;
+};
+
+function formatCompactNumber(value: number | string): string {
+  const num = Number(value);
+  if (Number.isNaN(num)) return String(value ?? "-");
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000) return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (abs >= 1_000) return `${(num / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(num);
+}
+
+function formatMetricValue(value: unknown): string {
+  if (value == null) return "-";
+  if (typeof value === "number") return formatCompactNumber(value);
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (!Number.isNaN(n)) return formatCompactNumber(n);
+    return value;
+  }
+  return String(value);
+}
+
+function prettyLabel(value?: string): string {
+  if (!value) return "-";
+  return String(value)
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeBreakdownResults(
+  results: Array<Record<string, unknown>>,
+): Array<{
+  dimensionValue: string;
+  value?: string | number;
+  percentage?: number;
+}> {
+  if (!Array.isArray(results)) return [];
+  return results
+    .map((r) => {
+      const dimensionValue =
+        typeof r.dimension_value === "string"
+          ? r.dimension_value
+          : typeof (r as any).dimensionValue === "string"
+          ? (r as any).dimensionValue
+          : "";
+      const value = (r as any).value ?? (r as any).count ?? (r as any).sum;
+      const percentageRaw = (r as any).percentage;
+      const percentage = typeof percentageRaw === "number" ? percentageRaw : typeof percentageRaw === "string" ? Number(percentageRaw) : undefined;
+      return { dimensionValue, value, percentage };
+    })
+    .filter((x) => Boolean(x.dimensionValue));
+}
+
 const CITY_LANGUAGE_BY_NAME: Record<string, string> = {
   Mumbai: "Marathi",
   Delhi: "Hindi",
   Bengaluru: "Kannada",
+  Bangalore: "Kannada",
+  Secunderabad: "Telugu",
+  Cyberabad: "Telugu",
+  "New Delhi": "Hindi",
+  "Greater Noida": "Hindi",
+  Nanded: "Marathi",
+  Kolhapur: "Marathi",
+  Solapur: "Marathi",
+  Amravati: "Marathi",
+  Akola: "Marathi",
+  Jalgaon: "Marathi",
+  Satara: "Marathi",
+  Sangli: "Marathi",
+  Kalyan: "Marathi",
+  Dombivli: "Marathi",
+  Palghar: "Marathi",
+  Vasai: "Marathi",
+  Virar: "Marathi",
+  Kakinada: "Telugu",
+  Nellore: "Telugu",
+  Rajahmundry: "Telugu",
+  Kadapa: "Telugu",
+  Anantapur: "Telugu",
+  Karimnagar: "Telugu",
+  Nizamabad: "Telugu",
+  Khammam: "Telugu",
+  Mahbubnagar: "Telugu",
+  Tirunelveli: "Tamil",
+  Vellore: "Tamil",
+  Thoothukudi: "Tamil",
+  Dindigul: "Tamil",
+  Karur: "Tamil",
+  Palakkad: "Malayalam",
+  Alappuzha: "Malayalam",
+  Kottayam: "Malayalam",
+  Malappuram: "Malayalam",
+  Udupi: "Kannada",
+  Ballari: "Kannada",
+  Davanagere: "Kannada",
+  Tumakuru: "Kannada",
+  Gulbarga: "Kannada",
+  Berhampur: "Odia",
+  Balasore: "Odia",
+  Puri: "Odia",
+  Bathinda: "Punjabi",
+  Mohali: "Punjabi",
+  Zirakpur: "Punjabi",
+  Tinsukia: "Assamese",
+  Tezpur: "Assamese",
+  Bokaro: "Hindi",
+  Hazaribagh: "Hindi",
+  Durg: "Hindi",
+  Korba: "Hindi",
+  Mathura: "Hindi",
+  Ayodhya: "Hindi",
+  Gorakhpur: "Hindi",
+  Saharanpur: "Hindi",
+  Muzaffarnagar: "Hindi",
+  Firozabad: "Hindi",
+  Jhansi: "Hindi",
+  Tiruppur: "Tamil",
   Hyderabad: "Telugu",
   Chennai: "Tamil",
   Kolkata: "Bengali",
@@ -911,6 +938,7 @@ export default function DashboardPage() {
       "male_pct",
       "female_pct",
       "top_city_1",
+      "top_city_1_language",
       "top_city_2",
       "top_city_3",
       "top_3_cities",
