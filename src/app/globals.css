@@ -294,6 +294,14 @@ body {
   color: #08243f;
   font-weight: 800;
   font-size: 0.92rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  height: auto;
+  max-height: none;
+  min-height: 2.4em;
+  line-height: 1.35;
+  vertical-align: top;
 }
 
 .insight-spreadsheet .Spreadsheet__cell--readonly {
