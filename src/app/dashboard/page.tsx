@@ -68,6 +68,13 @@ function formatMetricValue(value: unknown): string {
   return String(value);
 }
 
+function formatFullNumber(value: unknown): string {
+  if (value == null) return "-";
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) return String(value);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(numericValue);
+}
+
 function prettyLabel(value?: string): string {
   if (!value) return "-";
   return String(value)
@@ -413,7 +420,9 @@ type ParsedAccountRow = {
   requestedUsername: string;
   requestedInput: string;
   error?: string | null;
+  gender: string;
   totalFollowers: string;
+  totalFollowersCompact: string;
   reelsInteractionRate: string;
   age18To24: string;
   age25To34: string;
@@ -524,7 +533,9 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
       requestedUsername: result.requestedUsername,
       requestedInput: result.requestedInput,
       error: null,
+      gender: "Loading...",
       totalFollowers: "Loading...",
+      totalFollowersCompact: "Loading...",
       reelsInteractionRate: "Loading...",
       age18To24: "Loading...",
       age25To34: "Loading...",
@@ -540,6 +551,7 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
   }
 
   const rawResponses = result.data?.rawApiResponses ?? [];
+  const creatorGender = typeof result.data?.creators?.[0]?.gender === "string" ? result.data.creators[0].gender : "-";
   const totalFollowersMetric = readMetricByName(rawResponses, "total_followers", "lifetime");
   const reelsInteractionMetric = readMetricByName(rawResponses, "reels_interaction_rate", "last_90_days");
   const ageMetric = readMetricByBreakdown(rawResponses, "creator_engaged_accounts", "age", "this_month");
@@ -564,7 +576,9 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
     requestedUsername: result.requestedUsername,
     requestedInput: result.requestedInput,
     error: result.error ?? null,
-    totalFollowers: totalFollowersMetric?.value !== undefined ? formatMetricValue(totalFollowersMetric.value) : "-",
+    gender: creatorGender || "-",
+    totalFollowers: totalFollowersMetric?.value !== undefined ? formatFullNumber(totalFollowersMetric.value) : "-",
+    totalFollowersCompact: totalFollowersMetric?.value !== undefined ? formatMetricValue(totalFollowersMetric.value) : "-",
     reelsInteractionRate: reelsInteractionMetric?.value !== undefined ? `${formatMetricValue(reelsInteractionMetric.value)}%` : "-",
     age18To24: ageValue("18-24"),
     age25To34: ageValue("25-34"),
@@ -584,7 +598,9 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
 
   const columns = [
     { label: "Username", key: "requestedUsername" },
-    { label: "Total follower", key: "totalFollowers" },
+    { label: "Gender", key: "gender" },
+    { label: "Total followers", key: "totalFollowers" },
+    { label: "Total followers compact", key: "totalFollowersCompact" },
     { label: "Reels interaction rate", key: "reelsInteractionRate" },
     { label: "Age 18 - 24", key: "age18To24" },
     { label: "Age 25 - 34", key: "age25To34" },
@@ -930,7 +946,9 @@ export default function DashboardPage() {
 
     const headers = [
       "username",
-      "total_follower",
+      "gender",
+      "total_followers",
+      "total_followers_compact",
       "reels_interaction_rate",
       "age_18_24",
       "age_25_34",
@@ -946,7 +964,9 @@ export default function DashboardPage() {
 
     const rows = exportedRows.map((row) => [
       row.requestedUsername,
+      row.gender,
       row.totalFollowers,
+      row.totalFollowersCompact,
       row.reelsInteractionRate,
       row.age18To24,
       row.age25To34,
