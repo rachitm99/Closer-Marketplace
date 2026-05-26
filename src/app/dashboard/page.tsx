@@ -19,160 +19,11 @@ const INSTAGRAM_RESERVED_PATHS = new Set([
   "oauth",
 ]);
 
-type CreatorMarketplaceResult = {
-  creators: Array<{
-    id: string;
-    username: string;
-    country: string;
-    gender: string;
-    isMock: boolean;
-    insights: Record<string, string | number>;
-  }>;
-};
-
-type LookupResult = {
-  requestedInput: string;
-  requestedUsername: string;
-  loading?: boolean;
-  error?: string | null;
-  data?: any;
-};
-
-type RawApiResponse = Record<string, any>;
-
-type CreatorMarketplaceResultDebug = {
-  discoveredCreatorUsername?: string;
-  discoveredCreatorId?: string;
-  insights?: any;
-  creators?: any;
-  [key: string]: any;
-};
-
-function formatCompactNumber(value: number | string): string {
-  const num = Number(value);
-  if (Number.isNaN(num)) return String(value ?? "-");
-  const abs = Math.abs(num);
-  if (abs >= 1_000_000) return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (abs >= 1_000) return `${(num / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-  return String(num);
-}
-
-function formatMetricValue(value: unknown): string {
-  if (value == null) return "-";
-  if (typeof value === "number") return formatCompactNumber(value);
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (!Number.isNaN(n)) return formatCompactNumber(n);
-    return value;
-  }
-  return String(value);
-}
-
-function formatFullNumber(value: unknown): string {
-  if (value == null) return "-";
-  const numericValue = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(numericValue)) return String(value);
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(numericValue);
-}
-
-function prettyLabel(value?: string): string {
-  if (!value) return "-";
-  return String(value)
-    .replace(/[_-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function normalizeBreakdownResults(
-  results: Array<Record<string, unknown>>,
-): Array<{
-  dimensionValue: string;
-  value?: string | number;
-  percentage?: number;
-}> {
-  if (!Array.isArray(results)) return [];
-  return results
-    .map((r) => {
-      const dimensionValue =
-        typeof r.dimension_value === "string"
-          ? r.dimension_value
-          : typeof (r as any).dimensionValue === "string"
-          ? (r as any).dimensionValue
-          : "";
-      const value = (r as any).value ?? (r as any).count ?? (r as any).sum;
-      const percentageRaw = (r as any).percentage;
-      const percentage = typeof percentageRaw === "number" ? percentageRaw : typeof percentageRaw === "string" ? Number(percentageRaw) : undefined;
-      return { dimensionValue, value, percentage };
-    })
-    .filter((x) => Boolean(x.dimensionValue));
-}
-
 const CITY_LANGUAGE_BY_NAME: Record<string, string> = {
   Mumbai: "Marathi",
   Delhi: "Hindi",
   Bengaluru: "Kannada",
   Bangalore: "Kannada",
-  Secunderabad: "Telugu",
-  Cyberabad: "Telugu",
-  "New Delhi": "Hindi",
-  "Greater Noida": "Hindi",
-  Nanded: "Marathi",
-  Kolhapur: "Marathi",
-  Solapur: "Marathi",
-  Amravati: "Marathi",
-  Akola: "Marathi",
-  Jalgaon: "Marathi",
-  Satara: "Marathi",
-  Sangli: "Marathi",
-  Kalyan: "Marathi",
-  Dombivli: "Marathi",
-  Palghar: "Marathi",
-  Vasai: "Marathi",
-  Virar: "Marathi",
-  Kakinada: "Telugu",
-  Nellore: "Telugu",
-  Rajahmundry: "Telugu",
-  Kadapa: "Telugu",
-  Anantapur: "Telugu",
-  Karimnagar: "Telugu",
-  Nizamabad: "Telugu",
-  Khammam: "Telugu",
-  Mahbubnagar: "Telugu",
-  Tirunelveli: "Tamil",
-  Vellore: "Tamil",
-  Thoothukudi: "Tamil",
-  Dindigul: "Tamil",
-  Karur: "Tamil",
-  Palakkad: "Malayalam",
-  Alappuzha: "Malayalam",
-  Kottayam: "Malayalam",
-  Malappuram: "Malayalam",
-  Udupi: "Kannada",
-  Ballari: "Kannada",
-  Davanagere: "Kannada",
-  Tumakuru: "Kannada",
-  Gulbarga: "Kannada",
-  Berhampur: "Odia",
-  Balasore: "Odia",
-  Puri: "Odia",
-  Bathinda: "Punjabi",
-  Mohali: "Punjabi",
-  Zirakpur: "Punjabi",
-  Tinsukia: "Assamese",
-  Tezpur: "Assamese",
-  Bokaro: "Hindi",
-  Hazaribagh: "Hindi",
-  Durg: "Hindi",
-  Korba: "Hindi",
-  Mathura: "Hindi",
-  Ayodhya: "Hindi",
-  Gorakhpur: "Hindi",
-  Saharanpur: "Hindi",
-  Muzaffarnagar: "Hindi",
-  Firozabad: "Hindi",
-  Jhansi: "Hindi",
-  Tiruppur: "Tamil",
   Hyderabad: "Telugu",
   Chennai: "Tamil",
   Kolkata: "Bengali",
@@ -180,11 +31,6 @@ const CITY_LANGUAGE_BY_NAME: Record<string, string> = {
   Ahmedabad: "Gujarati",
   Jaipur: "Hindi",
   Lucknow: "Hindi",
-  Kanpur: "Hindi",
-  Nagpur: "Marathi",
-  Indore: "Hindi",
-  Bhopal: "Hindi",
-  Patna: "Hindi",
   Surat: "Gujarati",
   Vadodara: "Gujarati",
   Rajkot: "Gujarati",
@@ -195,99 +41,33 @@ const CITY_LANGUAGE_BY_NAME: Record<string, string> = {
   Visakhapatnam: "Telugu",
   Vijayawada: "Telugu",
   Guntur: "Telugu",
-  Tirupati: "Telugu",
-  Warangal: "Telugu",
   Coimbatore: "Tamil",
   Madurai: "Tamil",
-  Salem: "Tamil",
-  "Tiruchirappalli": "Tamil",
-  Erode: "Tamil",
   Kochi: "Malayalam",
   Thiruvananthapuram: "Malayalam",
-  Kozhikode: "Malayalam",
-  Thrissur: "Malayalam",
-  Kannur: "Malayalam",
-  Mysuru: "Kannada",
-  Hubballi: "Kannada",
-  Mangaluru: "Kannada",
-  Belagavi: "Kannada",
-  Shivamogga: "Kannada",
   Bhubaneswar: "Odia",
   Cuttack: "Odia",
-  Rourkela: "Odia",
-  Sambalpur: "Odia",
   Amritsar: "Punjabi",
   Ludhiana: "Punjabi",
   Jalandhar: "Punjabi",
-  Patiala: "Punjabi",
   Chandigarh: "Punjabi",
   Guwahati: "Assamese",
-  Dibrugarh: "Assamese",
-  Silchar: "Bengali",
-  Shillong: "English",
-  Imphal: "Manipuri",
-  Aizawl: "Mizo",
-  Agartala: "Bengali",
-  Itanagar: "Hindi",
-  Gangtok: "Nepali",
-  Ranchi: "Hindi",
-  Jamshedpur: "Hindi",
-  Dhanbad: "Hindi",
-  Dehradun: "Hindi",
-  Haridwar: "Hindi",
-  Varanasi: "Hindi",
-  Prayagraj: "Hindi",
-  Noida: "Hindi",
-  Ghaziabad: "Hindi",
-  Gurugram: "Hindi",
-  Faridabad: "Hindi",
-  Agra: "Hindi",
-  Meerut: "Hindi",
-  Bareilly: "Hindi",
-  Aligarh: "Hindi",
-  Moradabad: "Hindi",
-  Raipur: "Hindi",
-  Bilaspur: "Hindi",
-  Jabalpur: "Hindi",
-  Gwalior: "Hindi",
-  Ujjain: "Hindi",
   Srinagar: "Urdu",
   Jammu: "Dogri",
-  Leh: "Ladakhi",
   Panaji: "Konkani",
-  Margao: "Konkani",
-  Bikaner: "Hindi",
-  Jodhpur: "Hindi",
-  Udaipur: "Hindi",
-  Kota: "Hindi",
-  Ajmer: "Hindi",
-  Sikar: "Hindi",
-  Hisar: "Hindi",
-  Rohtak: "Hindi",
-  Panipat: "Hindi",
-  Sonipat: "Hindi",
-  Rewari: "Hindi",
-  Shimla: "Hindi",
-  Dharamshala: "Hindi",
-  Kullu: "Hindi",
-  Nainital: "Hindi",
-  Haldwani: "Hindi",
-  Almora: "Hindi",
-  Muzaffarpur: "Hindi",
-  Bhagalpur: "Hindi",
-  Darbhanga: "Hindi",
-  Purnia: "Hindi",
-  Malda: "Bengali",
-  Asansol: "Bengali",
-  Durgapur: "Bengali",
-  Siliguri: "Bengali",
-  Howrah: "Bengali",
-  Kharagpur: "Bengali",
-  Haldia: "Bengali",
 };
 
 function getCityLanguage(city: string): string {
   return CITY_LANGUAGE_BY_NAME[city.trim()] ?? "-";
+}
+
+function prettyLabel(value?: string): string {
+  if (!value) return "-";
+  return String(value)
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function normalizeInstagramUsername(value: string): string {
@@ -342,131 +122,66 @@ function extractInstagramUsernames(text: string): string[] {
   return Array.from(usernames);
 }
 
-function CombinedRawJsonCard({ results }: { results: LookupResult[] }) {
-  const combinedPayload = {
-    generatedAt: new Date().toISOString(),
-    lookups: results.map((result) => ({
-      requestedInput: result.requestedInput,
-      requestedUsername: result.requestedUsername,
-      error: result.error ?? null,
-      discoveredCreatorId: result.data?.discoveredCreatorId ?? null,
-      discoveredCreatorUsername: result.data?.discoveredCreatorUsername ?? null,
-      insightsLookupMethod: result.data?.insightsLookupMethod ?? null,
-      insightsLookupExplanation: result.data?.insightsLookupExplanation ?? null,
-      request: result.data?.request ?? null,
-      rawCapturePath: result.data?.rawCapturePath ?? null,
-    })),
-    rawApiResponses: results.flatMap((result) => result.data?.rawApiResponses ?? []),
-  };
-  const rawJson = JSON.stringify(combinedPayload, null, 2);
+function normalizeBreakdownResults(
+  results: Array<Record<string, unknown>>,
+): Array<{
+  dimensionValue: string;
+  value?: string | number;
+  percentage?: number;
+}> {
+  if (!Array.isArray(results)) return [];
 
-  return (
-    <article
-      style={{
-        border: "1px solid rgba(15,23,42,0.12)",
-        borderRadius: "14px",
-        padding: "0.95rem",
-        background: "#ffffff",
-        boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start" }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: "0.98rem" }}>Combined raw JSON</h3>
-          <p style={{ margin: "0.25rem 0 0", fontSize: "0.78rem", color: "rgba(15,23,42,0.65)" }}>
-            Flattened raw API responses plus lookup metadata in one pasteable object
-          </p>
-        </div>
-        <span
-          style={{
-            padding: "0.25rem 0.55rem",
-            borderRadius: "999px",
-            background: "rgba(59,130,246,0.12)",
-            color: "#1d4ed8",
-            fontSize: "0.75rem",
-            fontWeight: 700,
-          }}
-        >
-          JSON
-        </span>
-      </div>
-
-      <details open style={{ marginTop: "0.85rem" }}>
-        <summary style={{ cursor: "pointer", fontSize: "0.82rem", color: "rgba(15,23,42,0.7)" }}>
-          View combined JSON
-        </summary>
-        <pre
-          style={{
-            marginTop: "0.75rem",
-            padding: "0.9rem",
-            borderRadius: "12px",
-            background: "#0b1220",
-            color: "#dbe7ff",
-            overflowX: "auto",
-            fontSize: "0.78rem",
-            lineHeight: 1.5,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          
-          {rawJson}
-        </pre>
-      </details>
-    </article>
-  );
+  return results
+    .map((result) => {
+      const dimensionValue =
+        typeof result.dimension_value === "string"
+          ? result.dimension_value
+          : typeof (result as Record<string, unknown>).dimensionValue === "string"
+            ? ((result as Record<string, unknown>).dimensionValue as string)
+            : "";
+      const rawValue = (result as Record<string, unknown>).value ?? (result as Record<string, unknown>).count ?? (result as Record<string, unknown>).sum;
+      const value = typeof rawValue === "string" || typeof rawValue === "number" ? rawValue : undefined;
+      const percentageRaw = (result as Record<string, unknown>).percentage;
+      const percentage = typeof percentageRaw === "number" ? percentageRaw : typeof percentageRaw === "string" ? Number(percentageRaw) : undefined;
+      return { dimensionValue, value, percentage };
+    })
+    .filter((entry) => Boolean(entry.dimensionValue));
 }
 
-type ParsedAccountRow = {
-  requestedUsername: string;
-  requestedInput: string;
-  error?: string | null;
-  gender: string;
-  totalFollowers: string;
-  totalFollowersCompact: string;
-  reelsInteractionRate: string;
-  age18To24: string;
-  age25To34: string;
-  age35To44: string;
-  malePct: string;
-  femalePct: string;
-  topCity1: string;
-  topCity1Language: string;
-  topCity2: string;
-  topCity3: string;
-  top3Cities: string;
+type CreatorMarketplaceResultDebug = {
+  discoveredCreatorUsername?: string;
+  discoveredCreatorId?: string;
+  rawApiResponses?: Array<Record<string, unknown>>;
+  request?: Record<string, unknown>;
+  rawCapturePath?: string | null;
+  [key: string]: unknown;
 };
 
-function readMetricByName(
-  responses: Array<Record<string, unknown>>,
-  metricName: string,
-  timeRange?: string,
-): { value?: string | number; breakdowns?: { dimensionKey?: string; results?: Array<Record<string, unknown>> } } | null {
-  for (const response of responses as RawApiResponse[]) {
-    const data = response.payload?.data;
-    if (!Array.isArray(data)) {
-      continue;
-    }
+function formatCompactNumber(value: number | string): string {
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return String(value ?? "-");
+  const absoluteValue = Math.abs(numericValue);
+  if (absoluteValue >= 1_000_000) return `${(numericValue / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (absoluteValue >= 1_000) return `${(numericValue / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(numericValue);
+}
 
-    for (const item of data) {
-      const insights = (item as { insights?: { data?: Array<Record<string, unknown>> } }).insights?.data ?? [];
-      for (const insight of insights) {
-        const name = typeof insight.name === "string" ? insight.name : "";
-        const insightTimeRange = typeof insight.time_range === "string" ? insight.time_range : "";
-        if (name !== metricName) {
-          continue;
-        }
-        if (timeRange && insightTimeRange !== timeRange) {
-          continue;
-        }
-
-        const totalValue = (insight.total_value as { value?: string | number; breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined) ?? undefined;
-        return totalValue ?? null;
-      }
-    }
+function formatMetricValue(value: unknown): string {
+  if (value == null) return "-";
+  if (typeof value === "number") return formatCompactNumber(value);
+  if (typeof value === "string") {
+    const numericValue = Number(value);
+    if (!Number.isNaN(numericValue)) return formatCompactNumber(numericValue);
+    return value;
   }
+  return String(value);
+}
 
-  return null;
+function formatFullNumber(value: unknown): string {
+  if (value == null) return "-";
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) return String(value);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(numericValue);
 }
 
 function readMetricByBreakdown(
@@ -528,6 +243,98 @@ function extractTopCitiesFromResponses(responses: Array<Record<string, unknown>>
     .slice(0, 3);
 }
 
+function extractTopStatesFromResponses(responses: Array<Record<string, unknown>>): string[] {
+  const metric = readMetricByBreakdown(responses, "creator_engaged_accounts", "top_cities", "this_month");
+  const breakdowns = metric?.breakdowns;
+  if (!breakdowns?.dimensionKey || breakdowns.dimensionKey !== "top_cities" || !Array.isArray(breakdowns.results)) {
+    return [];
+  }
+
+  return breakdowns.results
+    .map((result) => {
+      if (typeof result.dimension_value !== "string") {
+        return null;
+      }
+
+      const parts = result.dimension_value.split(",").map((part) => part.trim()).filter(Boolean);
+      return parts[1] ?? null;
+    })
+    .filter((value): value is string => Boolean(value))
+    .slice(0, 3);
+}
+
+type RawApiResponse = {
+  type?: string;
+  url?: string;
+  status?: number;
+  ok?: boolean;
+  payload?: { data?: Array<Record<string, unknown>> };
+};
+
+type LookupResult = {
+  requestedInput: string;
+  requestedUsername: string;
+  loading?: boolean;
+  error?: string | null;
+  data?: {
+    rawApiResponses?: Array<Record<string, unknown>>;
+    creators?: Array<{ gender?: string }>;
+  };
+};
+
+type ParsedAccountRow = {
+  requestedUsername: string;
+  requestedInput: string;
+  error?: string | null;
+  gender: string;
+  totalFollowers: string;
+  totalFollowersCompact: string;
+  reelsInteractionRate: string;
+  age18To24: string;
+  age25To34: string;
+  age35To44: string;
+  malePct: string;
+  femalePct: string;
+  topCity1: string;
+  topState1: string;
+  topCity1Language: string;
+  topCity2: string;
+  topCity3: string;
+  top3Cities: string;
+};
+
+function readMetricByName(
+  responses: Array<Record<string, unknown>>,
+  metricName: string,
+  timeRange?: string,
+): { value?: string | number; breakdowns?: { dimensionKey?: string; results?: Array<Record<string, unknown>> } } | null {
+  for (const response of responses as RawApiResponse[]) {
+    const data = response.payload?.data;
+    if (!Array.isArray(data)) {
+      continue;
+    }
+
+    for (const item of data) {
+      const insights = (item as { insights?: { data?: Array<Record<string, unknown>> } }).insights?.data ?? [];
+      for (const insight of insights) {
+        const name = typeof insight.name === "string" ? insight.name : "";
+        const insightTimeRange = typeof insight.time_range === "string" ? insight.time_range : "";
+        if (name !== metricName) {
+          continue;
+        }
+        if (timeRange && insightTimeRange !== timeRange) {
+          continue;
+        }
+
+        const totalValue = (insight.total_value as { value?: string | number; breakdowns?: { dimension_key?: string; results?: Array<Record<string, unknown>> } } | undefined) ?? undefined;
+        return totalValue ?? null;
+      }
+    }
+  }
+
+  return null;
+}
+
 function parseLookupResult(result: LookupResult): ParsedAccountRow {
   if (result.loading && !result.data && !result.error) {
     return {
@@ -544,6 +351,7 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
       malePct: "Loading...",
       femalePct: "Loading...",
       topCity1: "Loading...",
+      topState1: "Loading...",
       topCity1Language: "Loading...",
       topCity2: "Loading...",
       topCity3: "Loading...",
@@ -587,6 +395,7 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
     malePct: genderValue("male"),
     femalePct: genderValue("female"),
     topCity1: topCities[0] ?? "-",
+    topState1: extractTopStatesFromResponses(rawResponses)[0] ?? "-",
     topCity1Language: topCities[0] ? getCityLanguage(topCities[0]) : "-",
     topCity2: topCities[1] ?? "-",
     topCity3: topCities[2] ?? "-",
@@ -609,6 +418,7 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
     { label: "Male %", key: "malePct" },
     { label: "Female %", key: "femalePct" },
     { label: "Top city 1", key: "topCity1" },
+    { label: "Top state 1", key: "topState1" },
     { label: "Top city 1 language", key: "topCity1Language" },
     { label: "Top city 2", key: "topCity2" },
     { label: "Top city 3", key: "topCity3" },
@@ -666,6 +476,56 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function CombinedRawJsonCard({ results }: { results: LookupResult[] }) {
+  const combinedPayload = {
+    generatedAt: new Date().toISOString(),
+    lookups: results.map((result) => ({
+      requestedInput: result.requestedInput,
+      requestedUsername: result.requestedUsername,
+      error: result.error ?? null,
+      rawApiResponses: result.data?.rawApiResponses ?? [],
+    })),
+  };
+
+  return (
+    <article
+      style={{
+        border: "1px solid rgba(15,23,42,0.12)",
+        borderRadius: "14px",
+        padding: "0.95rem",
+        background: "#ffffff",
+        boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "start" }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "0.98rem" }}>Combined raw JSON</h3>
+          <p style={{ margin: "0.25rem 0 0", fontSize: "0.78rem", color: "rgba(15,23,42,0.65)" }}>
+            Flattened raw API responses plus lookup metadata in one pasteable object
+          </p>
+        </div>
+      </div>
+
+      <pre
+        style={{
+          marginTop: "0.9rem",
+          borderRadius: "12px",
+          background: "#0b1220",
+          color: "#dbe7ff",
+          overflowX: "auto",
+          fontSize: "0.78rem",
+          lineHeight: 1.5,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          padding: "0.85rem",
+        }}
+      >
+        {JSON.stringify(combinedPayload, null, 2)}
+      </pre>
+    </article>
   );
 }
 
@@ -898,7 +758,7 @@ export default function DashboardPage() {
             const failedResult: LookupResult = {
               requestedInput: parsedUsername,
               requestedUsername: parsedUsername,
-              error: "error" in payload ? payload.error : "Unable to load creators.",
+              error: "error" in payload && typeof payload.error === "string" ? payload.error : "Unable to load creators.",
               loading: false,
             };
             setBatchResults((current) =>
@@ -957,6 +817,7 @@ export default function DashboardPage() {
       "male_pct",
       "female_pct",
       "top_city_1",
+      "top_state_1",
       "top_city_1_language",
       "top_city_2",
       "top_city_3",
@@ -975,6 +836,7 @@ export default function DashboardPage() {
       row.malePct,
       row.femalePct,
       row.topCity1,
+      row.topState1,
       row.topCity1Language,
       row.topCity2,
       row.topCity3,
