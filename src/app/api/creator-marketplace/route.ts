@@ -813,35 +813,11 @@ export async function GET(request: NextRequest) {
 
       insightVariants.push({ fields: "insights.metrics(total_followers)" });
 
-      const engagedTimeRanges = ["this_week", "last_14_days", "this_month"];
-      const engagedBreakdowns = ["follow_type", "gender", "age", "top_countries", "top_cities"];
-      for (const timeRange of engagedTimeRanges) {
-        insightVariants.push({
-          fields: `insights.metrics(creator_engaged_accounts).time_range(${timeRange})`,
-        });
-      }
-      for (const breakdown of engagedBreakdowns) {
-        insightVariants.push({
-          fields: `insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(${breakdown})`,
-        });
-      }
-
-      const reachTimeRanges = ["this_week", "last_14_days", "this_month"];
-      const reachBreakdowns = ["follow_type", "media_type"];
-      for (const timeRange of reachTimeRanges) {
-        insightVariants.push({
-          fields: `insights.metrics(creator_reach).time_range(${timeRange})`,
-        });
-      }
-      for (const breakdown of reachBreakdowns) {
-        insightVariants.push({
-          fields: `insights.metrics(creator_reach).time_range(this_month).breakdown(${breakdown})`,
-        });
-      }
-
       insightVariants.push(
+        { fields: "insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(gender)" },
+        { fields: "insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(age)" },
+        { fields: "insights.metrics(creator_engaged_accounts).time_range(this_month).breakdown(top_cities)" },
         { fields: "insights.metrics(reels_interaction_rate).time_range(last_90_days)" },
-        { fields: "insights.metrics(reels_hook_rate).time_range(last_90_days)" },
       );
 
       for (const variant of insightVariants) {

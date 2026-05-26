@@ -41,6 +41,7 @@ type LookupResult = {
   requestedUsername: string;
   data?: CreatorMarketplaceResultDebug;
   error?: string;
+  loading?: boolean;
 };
 
 type RawApiResponse = {
@@ -247,6 +248,7 @@ type ParsedAccountRow = {
   topCity1: string;
   topCity2: string;
   topCity3: string;
+  top3Cities: string;
 };
 
 function readMetricByName(
@@ -341,6 +343,25 @@ function extractTopCitiesFromResponses(responses: Array<Record<string, unknown>>
 }
 
 function parseLookupResult(result: LookupResult): ParsedAccountRow {
+  if (result.loading && !result.data && !result.error) {
+    return {
+      requestedUsername: result.requestedUsername,
+      requestedInput: result.requestedInput,
+      error: null,
+      totalFollowers: "Loading...",
+      reelsInteractionRate: "Loading...",
+      age18To24: "Loading...",
+      age25To34: "Loading...",
+      age35To44: "Loading...",
+      malePct: "Loading...",
+      femalePct: "Loading...",
+      topCity1: "Loading...",
+      topCity2: "Loading...",
+      topCity3: "Loading...",
+      top3Cities: "Loading...",
+    };
+  }
+
   const rawResponses = result.data?.rawApiResponses ?? [];
   const totalFollowersMetric = readMetricByName(rawResponses, "total_followers", "lifetime");
   const reelsInteractionMetric = readMetricByName(rawResponses, "reels_interaction_rate", "last_90_days");
@@ -376,6 +397,7 @@ function parseLookupResult(result: LookupResult): ParsedAccountRow {
     topCity1: topCities[0] ?? "-",
     topCity2: topCities[1] ?? "-",
     topCity3: topCities[2] ?? "-",
+    top3Cities: [topCities[0], topCities[1], topCities[2]].filter((value): value is string => Boolean(value)).join(", ") || "-",
   };
 }
 
@@ -394,6 +416,7 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
     { label: "Top city 1", key: "topCity1" },
     { label: "Top city 2", key: "topCity2" },
     { label: "Top city 3", key: "topCity3" },
+    { label: "Top 3 cities", key: "top3Cities" },
   ] as const;
 
   const sheetData = useMemo<Matrix<CellBase<string>>>(() => {
@@ -646,12 +669,18 @@ export default function DashboardPage() {
 
     setLoading(true);
     setError(null);
-    setBatchResults([]);
+    setBatchResults(
+      parsedUsernames.map((parsedUsername) => ({
+        requestedInput: parsedUsername,
+        requestedUsername: parsedUsername,
+        loading: true,
+      })),
+    );
 
     try {
       const queryValue = queryInput.trim();
-      const lookupResults = await Promise.all(
-        parsedUsernames.map(async (parsedUsername) => {
+      const lookupResults = await Promise.allSettled(
+        parsedUsernames.map(async (parsedUsername, index) => {
           const params = new URLSearchParams({
             username: parsedUsername,
             include_insights: "true",
@@ -669,28 +698,39 @@ export default function DashboardPage() {
           const payload = (await response.json()) as CreatorMarketplaceResultDebug | { error: string };
 
           if (!response.ok || "error" in payload) {
-            return {
+            const failedResult: LookupResult = {
               requestedInput: parsedUsername,
               requestedUsername: parsedUsername,
               error: "error" in payload ? payload.error : "Unable to load creators.",
-            } satisfies LookupResult;
+              loading: false,
+            };
+            setBatchResults((current) =>
+              current.map((item, currentIndex) => (currentIndex === index ? failedResult : item)),
+            );
+            return failedResult;
           }
 
-          return {
+          const successResult: LookupResult = {
             requestedInput: parsedUsername,
             requestedUsername: (payload as CreatorMarketplaceResultDebug).discoveredCreatorUsername || parsedUsername,
             data: payload as CreatorMarketplaceResultDebug,
-          } satisfies LookupResult;
+            loading: false,
+          };
+          setBatchResults((current) =>
+            current.map((item, currentIndex) => (currentIndex === index ? successResult : item)),
+          );
+          return successResult;
         }),
       );
 
-      setBatchResults(lookupResults);
-
-      const failures = lookupResults.filter((item) => item.error);
-      if (failures.length && failures.length === lookupResults.length) {
+      const completedResults = lookupResults
+        .filter((item): item is PromiseFulfilledResult<LookupResult> => item.status === "fulfilled")
+        .map((item) => item.value);
+      const failures = completedResults.filter((item) => item.error);
+      if (failures.length && failures.length === completedResults.length) {
         setError(failures[0]?.error ?? "Unable to load creators.");
       } else if (failures.length) {
-        setError(`Loaded ${lookupResults.length - failures.length} of ${lookupResults.length} accounts. Some lookups failed.`);
+        setError(`Loaded ${completedResults.length - failures.length} of ${completedResults.length} accounts. Some lookups failed.`);
       }
     } catch {
       setError("Could not reach the API route. Check local server logs.");
@@ -700,7 +740,11 @@ export default function DashboardPage() {
   }
 
   function onExportCsv() {
-    if (!batchResults.length) {
+    const exportedRows = batchResults
+      .filter((result) => result.data && !result.loading)
+      .map((result) => parseLookupResult(result));
+
+    if (!exportedRows.length) {
       return;
     }
 
@@ -716,28 +760,23 @@ export default function DashboardPage() {
       "top_city_1",
       "top_city_2",
       "top_city_3",
+      "top_3_cities",
     ];
 
-    const rows = batchResults.map((result) => {
-      const data = result.data;
-      const creator = data?.creators?.[0];
-      const snapshot = data?.analyticsSnapshot;
-      const topCities = snapshot?.topCities ?? [];
-
-      return [
-        result.requestedUsername || result.requestedInput,
-        String(creator?.insights?.total_followers ?? creator?.insights?.followers_count ?? ""),
-        String(snapshot?.interactionRatePct ?? ""),
-        String(snapshot?.age18To24Pct ?? ""),
-        String(snapshot?.age25To34Pct ?? ""),
-        String(snapshot?.age35To44Pct ?? ""),
-        String(snapshot?.malePct ?? ""),
-        String(snapshot?.femalePct ?? ""),
-        String(topCities[0] ?? ""),
-        String(topCities[1] ?? ""),
-        String(topCities[2] ?? ""),
-      ];
-    });
+    const rows = exportedRows.map((row) => [
+      row.requestedUsername,
+      row.totalFollowers,
+      row.reelsInteractionRate,
+      row.age18To24,
+      row.age25To34,
+      row.age35To44,
+      row.malePct,
+      row.femalePct,
+      row.topCity1,
+      row.topCity2,
+      row.topCity3,
+      row.top3Cities,
+    ]);
 
     const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
     const csv = [headers, ...rows]
