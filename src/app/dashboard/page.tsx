@@ -460,6 +460,7 @@ function ParsedFieldsTable({ results }: { results: LookupResult[] }) {
       <div style={{ padding: "1rem" }}>
         <div style={{ borderRadius: "14px", border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", background: "#fff" }}>
           <Spreadsheet
+            className="insight-spreadsheet"
             data={sheetData}
             columnLabels={columnLabels}
             rowLabels={rowLabels}

@@ -32,9 +32,9 @@ body {
 }
 
 .dashboard-wrap {
-  max-width: 1080px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 2rem 1rem 3rem;
+  padding: 2rem 0.6rem 3rem;
 }
 
 .landing-shell {
@@ -264,6 +264,53 @@ body {
   padding: 0.55rem 0.9rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+.insight-spreadsheet.Spreadsheet {
+  --background-color: #fffdf3;
+  --text-color: #0b2440;
+  --readonly-text-color: #0f4c81;
+  --outline-color: #0f7bd8;
+  --outline-background-color: rgb(15 123 216 / 18%);
+  --border-color: #7bc4ff;
+  --header-background-color: #d8f0ff;
+  --elevation: 0 10px 24px rgb(15 35 61 / 14%);
+  font-weight: 800;
+}
+
+.insight-spreadsheet .Spreadsheet__header {
+  color: #07335e;
+  font-weight: 900;
+  background: linear-gradient(180deg, #c1e7ff 0%, #9dd6ff 100%);
+}
+
+.insight-spreadsheet .Spreadsheet__header--selected {
+  background: linear-gradient(180deg, #68bbff 0%, #3098ff 100%);
+  color: #05223f;
+}
+
+.insight-spreadsheet .Spreadsheet__cell,
+.insight-spreadsheet .Spreadsheet__header {
+  color: #08243f;
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.insight-spreadsheet .Spreadsheet__cell--readonly {
+  color: #124d8d;
+}
+
+.insight-spreadsheet .Spreadsheet__cell:hover {
+  background: rgb(15 123 216 / 10%);
+}
+
+.insight-spreadsheet .Spreadsheet__floating-rect--selected {
+  background: rgb(15 123 216 / 15%);
+  border-color: #0f7bd8;
+}
+
+.insight-spreadsheet .Spreadsheet__floating-rect--copied {
+  border-color: #ff7a18;
 }
 
 .auth-row {
